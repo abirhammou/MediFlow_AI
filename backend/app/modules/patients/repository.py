@@ -3,13 +3,18 @@ from datetime import datetime
 from typing import Any
 
 from beanie import PydanticObjectId, SortDirection, UpdateResponse
-from beanie.operators import NE, And, Eq, Or, RegEx, Set
+from beanie.operators import NE, And, Eq, In, Or, RegEx, Set
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from app.core.models import AiReviewStatus
 from app.core.pagination import Page, check_page
-from app.modules.patients.models import BloodType, Gender, Patient, PatientSummary
+from app.modules.patients.models import (
+    BloodType,
+    Gender,
+    Patient,
+    PatientSummary,
+    SummaryStatus,
+)
 
 # API sort keys -> MongoDB fields; "-key" sorts descending.
 SORTABLE_FIELDS = {
@@ -180,5 +185,40 @@ async def get_latest_summary(patient_id: PydanticObjectId) -> PatientSummary | N
 async def get_validated_summary(patient_id: PydanticObjectId) -> PatientSummary | None:
     return await PatientSummary.find_one(
         Eq(PatientSummary.patient_id, patient_id),
-        Eq(PatientSummary.status, AiReviewStatus.VALIDATED),
+        Eq(PatientSummary.status, SummaryStatus.VALIDATED),
     )
+
+
+async def list_summaries(patient_id: PydanticObjectId) -> list[PatientSummary]:
+    """Every summary of a patient, newest first."""
+    return (
+        await PatientSummary.find(Eq(PatientSummary.patient_id, patient_id))
+        .sort(-PatientSummary.created_at, -PatientSummary.id)
+        .to_list()
+    )
+
+
+async def get_summary(
+    patient_id: PydanticObjectId, summary_id: PydanticObjectId
+) -> PatientSummary | None:
+    return await PatientSummary.find_one(
+        Eq(PatientSummary.id, summary_id), Eq(PatientSummary.patient_id, patient_id)
+    )
+
+
+async def update_summary(
+    summary_id: PydanticObjectId, statuses: list[SummaryStatus], changes: dict[str, Any]
+) -> PatientSummary | None:
+    """`$set` on a summary only if its status is still one of `statuses` (camelCase names)."""
+    return await PatientSummary.find_one(
+        Eq(PatientSummary.id, summary_id), In(PatientSummary.status, statuses)
+    ).update(Set(changes), response_type=UpdateResponse.NEW_DOCUMENT)
+
+
+async def supersede_validated(patient_id: PydanticObjectId, keep: PydanticObjectId) -> None:
+    """The patient's VALIDATED summary, unless it is `keep`, becomes SUPERSEDED."""
+    await PatientSummary.find(
+        Eq(PatientSummary.patient_id, patient_id),
+        Eq(PatientSummary.status, SummaryStatus.VALIDATED),
+        NE(PatientSummary.id, keep),
+    ).update_many(Set({"status": SummaryStatus.SUPERSEDED}))

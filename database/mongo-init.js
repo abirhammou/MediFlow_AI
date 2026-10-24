@@ -16,6 +16,8 @@ const ROLES              = ["ADMIN", "SECRETARY", "DOCTOR", "ADMIN_STAFF", "PATI
 const GENDERS            = ["MALE", "FEMALE", "OTHER"];
 const APPOINTMENT_STATUS = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 const AI_REVIEW_STATUS   = ["DRAFT", "VALIDATED", "REJECTED"];
+// patient_summaries only: a VALIDATED summary replaced by a newer one becomes SUPERSEDED
+const SUMMARY_STATUS     = [...AI_REVIEW_STATUS, "SUPERSEDED"];
 const REPORT_STATUS      = ["DRAFT", "FINAL", "ARCHIVED"];
 const TASK_STATUS        = ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"];
 const REMINDER_STATUS    = ["DRAFT", "APPROVED", "SENT", "DISCARDED"];
@@ -187,7 +189,7 @@ const summaries = defineCollection(
   {
     patientId: oid,
     content: str({ minLength: 1, maxLength: 4000 }),
-    status: oneOf(AI_REVIEW_STATUS),
+    status: oneOf(SUMMARY_STATUS),
     llmModel: optStr(),
     sourceSnapshot: { bsonType: ["object", "null"], description: "patient fields sent to the LLM" },
     generatedBy: optOid,
