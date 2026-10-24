@@ -82,3 +82,27 @@ a:hover { text-decoration: underline; }
 .check { display: flex; align-items: flex-start; gap: .5rem; font-size: .8rem; color: var(--muted); cursor: pointer;
   input { margin-top: .15rem; accent-color: var(--primary); width: 16px; height: 16px; }
 }
+
+/* ---------- Module pages ---------- */
+.module-page { padding: 2rem; }
+
+.module-header {
+  display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+  h1 { font-size: 1.5rem; font-weight: 800; margin: 0; }
+  p  { color: var(--muted); font-size: .875rem; margin: .2rem 0 0; }
+}
+
+.module-icon {
+  display: grid; place-items: center; width: 52px; height: 52px;
+  border-radius: 16px; flex-shrink: 0;
+}
+
+.coming-soon {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 4rem 2rem; text-align: center; color: var(--muted);
+  background: var(--surface); border-radius: var(--radius); border: 2px dashed var(--border);
+  gap: 1rem;
+  h2 { font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+  p  { font-size: .9rem; max-width: 380px; }
+  app-icon { opacity: .25; }
+}

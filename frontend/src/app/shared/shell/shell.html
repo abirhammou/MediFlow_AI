@@ -1,0 +1,83 @@
+<!-- Sidebar -->
+<aside class="sidebar" [class.open]="sidebarOpen()">
+
+  <!-- Logo -->
+  <a class="sidebar-logo" routerLink="/dashboard" (click)="close()">
+    <div class="logo-icon">
+      <app-icon name="heart" [size]="18" />
+    </div>
+    MediFlow AI
+  </a>
+
+  <!-- Navigation -->
+  <nav class="nav" aria-label="Navigation principale">
+    <span class="sidebar-section">Navigation</span>
+
+    @for (item of navItems(); track item.route) {
+      <a class="nav-item"
+         [routerLink]="item.route"
+         routerLinkActive="active"
+         [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+         (click)="close()">
+        @if (item.dot) {
+          <span class="nav-dot" [style.background]="item.dot"></span>
+        } @else {
+          <app-icon [name]="item.icon" [size]="17" />
+        }
+        <span class="nav-label">{{ item.label }}</span>
+      </a>
+    }
+  </nav>
+
+  <!-- Footer -->
+  <div class="sidebar-footer">
+    @if (user; as u) {
+      <div class="user-info">
+        <div class="avatar">{{ initials }}</div>
+        <div>
+          <div class="user-name">{{ u.first_name }} {{ u.last_name }}</div>
+          <div class="user-role">{{ roleLabel(u.role) }}</div>
+        </div>
+      </div>
+    }
+    <button class="nav-item" (click)="logout()">
+      <app-icon name="log-out" [size]="17" />
+      <span>Se déconnecter</span>
+    </button>
+  </div>
+
+</aside>
+
+<!-- Overlay mobile -->
+@if (sidebarOpen()) {
+  <div class="overlay" (click)="close()"></div>
+}
+
+<!-- Main area -->
+<div class="main-area">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" (click)="toggle()" aria-label="Menu">
+        <app-icon name="menu" [size]="20" />
+      </button>
+      <span class="page-title">{{ currentTitle() }}</span>
+    </div>
+    <div class="topbar-right">
+      @if (user; as u) {
+        <span class="who">
+          <app-icon name="user" [size]="15" />
+          {{ u.first_name }} {{ u.last_name }}
+          <span class="role-badge">{{ roleLabel(u.role) }}</span>
+        </span>
+      }
+    </div>
+  </header>
+
+  <!-- Page content -->
+  <main class="content">
+    <router-outlet />
+  </main>
+
+</div>

@@ -1,14 +1,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo.asynchronous.database import AsyncDatabase
-from pymongo.errors import PyMongoError
 
 from app.core.config import settings
 from app.core.db import create_client, get_db, init_db
-from app.errors import APIError, register_error_handlers
+from app.errors import register_error_handlers
 from app.modules.discovery import include_discovered_routers
 from app.modules.llm_router import router as llm_router
 
@@ -36,13 +34,9 @@ app.add_middleware(
 register_error_handlers(app)
 
 
-@app.get("/api/health")
-async def health(database: AsyncDatabase = Depends(get_db)) -> dict[str, str]:
-    try:
-        await database.command("ping")
-    except PyMongoError:
-        raise APIError(503, "database_unavailable", "La base de données est injoignable.") from None
-    return {"status": "ok", "database": "ok"}
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 include_discovered_routers(app)
