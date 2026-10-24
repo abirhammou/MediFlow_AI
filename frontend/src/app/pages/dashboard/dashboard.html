@@ -1,25 +1,10 @@
-<header class="topbar">
-  <div class="container bar">
-    <app-logo />
-    <div class="account">
-      @if (auth.user(); as user) {
-        <span class="who">
-          <app-icon name="user" [size]="16" />
-          {{ user.first_name }} {{ user.last_name }}
-          <span class="role">{{ roleLabel(user.role) }}</span>
-        </span>
-      }
-      <button type="button" class="btn btn-outline btn-sm" (click)="auth.logout()">Se déconnecter</button>
-    </div>
-  </div>
-</header>
+<div class="page">
 
-<main class="container page">
   @if (error()) {
     <div class="alert" role="alert">{{ error() }}</div>
   } @else if (summary(); as data) {
     <section class="intro">
-      <h1>Bonjour {{ data.full_name }}</h1>
+      <h1>Bonjour, {{ data.full_name }} 👋</h1>
       <p>Espace {{ roleLabel(data.role).toLowerCase() }} · voici votre résumé du jour.</p>
     </section>
 
@@ -63,4 +48,5 @@
   } @else {
     <p class="loading">Chargement du tableau de bord…</p>
   }
-</main>
+
+</div>
