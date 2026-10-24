@@ -1,0 +1,18 @@
+.auth {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1.25rem; padding: 2rem 1rem;
+  background:
+    radial-gradient(600px 400px at 15% 90%, rgba(20, 89, 217, .10), transparent 70%),
+    radial-gradient(700px 500px at 90% 10%, rgba(20, 89, 217, .08), transparent 70%),
+    var(--bg);
+}
+.card {
+  width: 100%; max-width: 440px; padding: 2rem 2rem 1.75rem;
+  background: var(--surface); border-radius: 20px; box-shadow: var(--shadow-md);
+}
+header { text-align: center; margin-bottom: 1.5rem;
+  h1 { font-size: 1.35rem; font-weight: 700; margin-top: 1.25rem; letter-spacing: -.01em; }
+  p { font-size: .82rem; color: var(--muted); margin-top: .25rem; }
+}
+.back { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--muted);
+  &:hover { color: var(--primary); text-decoration: none; } }

@@ -1,0 +1,57 @@
+<app-auth-layout title="Créer un compte" subtitle="Rejoignez MediFlow AI et prenez soin de votre santé">
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <div class="field">
+      <label for="fullName">Nom complet</label>
+      <input id="fullName" class="input" formControlName="fullName" autocomplete="name"
+             placeholder="Votre nom et prénom" [class.invalid]="invalid('fullName')" />
+      @if (invalid('fullName')) { <span class="error">Saisissez votre nom complet.</span> }
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" class="input" formControlName="email" autocomplete="email"
+             placeholder="exemple@domain.com" [class.invalid]="invalid('email')" />
+      @if (invalid('email')) { <span class="error">Saisissez une adresse email valide.</span> }
+    </div>
+
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <div class="input-wrap">
+        <input id="password" class="input" formControlName="password" autocomplete="new-password"
+               [type]="showPassword() ? 'text' : 'password'" placeholder="Choisissez un mot de passe"
+               [class.invalid]="invalid('password')" />
+        <button type="button" class="input-toggle" (click)="showPassword.set(!showPassword())"
+                [attr.aria-label]="showPassword() ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+          <app-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="18" />
+        </button>
+      </div>
+      @if (invalid('password')) { <span class="error">Le mot de passe doit contenir au moins 8 caractères.</span> }
+    </div>
+
+    <div class="field">
+      <label for="confirmPassword">Confirmer le mot de passe</label>
+      <div class="input-wrap">
+        <input id="confirmPassword" class="input" formControlName="confirmPassword" autocomplete="new-password"
+               [type]="showConfirm() ? 'text' : 'password'" placeholder="Confirmez votre mot de passe"
+               [class.invalid]="invalid('confirmPassword') || mismatch" />
+        <button type="button" class="input-toggle" (click)="showConfirm.set(!showConfirm())"
+                [attr.aria-label]="showConfirm() ? 'Masquer la confirmation' : 'Afficher la confirmation'">
+          <app-icon [name]="showConfirm() ? 'eye-off' : 'eye'" [size]="18" />
+        </button>
+      </div>
+      @if (mismatch) { <span class="error">Les mots de passe ne correspondent pas.</span> }
+    </div>
+
+    <div class="field terms">
+      <label class="check">
+        <input type="checkbox" formControlName="terms" />
+        <span>J'accepte les <a href="#">conditions d'utilisation</a> et la <a href="#">politique de confidentialité</a></span>
+      </label>
+      @if (invalid('terms')) { <span class="error">Vous devez accepter les conditions pour continuer.</span> }
+    </div>
+
+    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">Créer mon compte</button>
+
+    <p class="switch">Vous avez déjà un compte ? <a routerLink="/login">Se connecter</a></p>
+  </form>
+</app-auth-layout>

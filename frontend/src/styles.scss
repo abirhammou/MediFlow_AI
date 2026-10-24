@@ -1,1 +1,80 @@
 /* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --primary: #1459d9;
+  --primary-700: #0f47b3;
+  --primary-100: #dbe8fb;
+  --primary-50: #eef4fd;
+  --ink: #0f1f3d;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --bg: #f4f7fc;
+  --surface: #ffffff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 31, 61, 0.06);
+  --shadow-md: 0 10px 30px rgba(20, 89, 217, 0.10);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+h1, h2, h3, p { margin: 0; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 3px solid var(--primary-100); outline-offset: 2px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  height: 44px; padding: 0 1.25rem;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  font: inherit; font-weight: 600; font-size: .9rem; cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  &:hover { text-decoration: none; }
+  &:disabled { opacity: .6; cursor: not-allowed; }
+}
+.btn-primary {
+  background: var(--primary); color: #fff; box-shadow: 0 6px 16px rgba(20, 89, 217, .25);
+  &:hover:not(:disabled) { background: var(--primary-700); }
+}
+.btn-outline {
+  background: #fff; color: var(--primary); border-color: var(--primary-100);
+  &:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-50); }
+}
+.btn-block { width: 100%; }
+
+/* ---------- Forms ---------- */
+.field { display: flex; flex-direction: column; gap: .375rem; margin-bottom: 1rem; }
+.field > label { font-size: .8rem; font-weight: 600; color: var(--ink); }
+.input-wrap { position: relative; }
+.input {
+  width: 100%; height: 44px; padding: 0 .875rem;
+  font: inherit; font-size: .9rem; color: var(--ink);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: border-color .15s, box-shadow .15s;
+  &::placeholder { color: #a3afc2; }
+  &:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-100); }
+  &.invalid { border-color: var(--danger); }
+}
+.input-wrap .input { padding-right: 2.75rem; }
+.input-toggle {
+  position: absolute; right: .5rem; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 32px; height: 32px;
+  background: none; border: 0; border-radius: 8px; color: var(--muted); cursor: pointer;
+  &:hover { color: var(--primary); background: var(--primary-50); }
+}
+.error { color: var(--danger); font-size: .75rem; }
+.check { display: flex; align-items: flex-start; gap: .5rem; font-size: .8rem; color: var(--muted); cursor: pointer;
+  input { margin-top: .15rem; accent-color: var(--primary); width: 16px; height: 16px; }
+}
