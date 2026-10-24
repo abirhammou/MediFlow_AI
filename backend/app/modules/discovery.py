@@ -7,8 +7,7 @@ from types import ModuleType
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
 
-from app.config import MODULES_DIRECTORY, Settings, settings
-
+from app.core.config import MODULES_DIRECTORY, Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def include_discovered_routers(app: FastAPI, config: Settings = settings) -> Non
     for module_name, _ in iter_module_directories(config):
         try:
             module = _load_router(module_name)
-            router = getattr(module, "router")
+            router = module.router
             if not isinstance(router, APIRouter):
                 raise TypeError("l'attribut router doit être un APIRouter")
 

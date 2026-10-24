@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService, apiErrorMessage } from '../../core/auth/auth.service';
 import { AuthLayout } from '../../shared/auth-layout/auth-layout';
 import { Icon } from '../../shared/icon/icon';
 
@@ -12,12 +13,15 @@ import { Icon } from '../../shared/icon/icon';
 })
 export class Login {
   private fb = inject(FormBuilder);
+  private auth = inject(AuthService);
+  private router = inject(Router);
 
   showPassword = signal(false);
   submitting = signal(false);
+  error = signal<string | null>(null);
 
   form = this.fb.nonNullable.group({
-    identifier: ['', [Validators.required]],
+    identifier: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(6)]],
     remember: [false],
   });
@@ -33,8 +37,14 @@ export class Login {
       return;
     }
     this.submitting.set(true);
-    // TODO: call AuthService.login(this.form.getRawValue()) then router.navigate(['/patient/dashboard'])
-    console.log('login', this.form.getRawValue());
-    setTimeout(() => this.submitting.set(false), 600);
+    this.error.set(null);
+    const { identifier, password, remember } = this.form.getRawValue();
+    this.auth.login(identifier, password, remember).subscribe({
+      next: () => this.router.navigate(['/dashboard']),
+      error: err => {
+        this.error.set(apiErrorMessage(err));
+        this.submitting.set(false);
+      },
+    });
   }
 }

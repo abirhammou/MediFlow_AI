@@ -3,7 +3,8 @@
 1. Depuis `backend/`, exécuter `python scripts/new_module.py <nom>`.
 2. Adapter `schemas.py`, `repository.py`, `service.py` et `prompts.py` dans le nouveau dossier.
 3. Renseigner ses 3 variables LLM (`<NOM>_LLM_BASE_URL`, `<NOM>_LLM_MODEL` et `<NOM>_LLM_API_KEY`) dans son `.env` local.
-4. Lancer `python -m pytest`, puis tester les routes du module dans `/docs`.
+4. Si le module a des modèles Beanie (`models.py`), les ajouter à `DOCUMENT_MODELS` dans `app/core/db.py`; leurs champs doivent exister dans `database/mongo-init.js`.
+5. Lancer `python -m pytest`, puis tester les routes du module dans `/docs`.
 
 Les noms acceptés sont en minuscules, composés de lettres et d'underscores. Le générateur ajoute les réglages LLM à `.env.example` et `.env`, et copie les tests du module modèle.
 

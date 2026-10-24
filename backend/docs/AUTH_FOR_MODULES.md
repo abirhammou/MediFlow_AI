@@ -2,7 +2,7 @@
 
 ## Protéger une route
 
-`get_current_user` valide le JWT, recharge l'utilisateur depuis `users` et refuse tout compte dont le statut n'est pas `active` (401 pour un jeton absent/invalide, 403 pour un compte non actif).
+`get_current_user` valide le JWT, recharge l'utilisateur (`User`, Beanie) depuis `users` et refuse tout compte dont `is_active` est faux (401 pour un jeton absent/invalide, 403 pour un compte inactif ou en attente).
 
 > **Attention : le template n'est pas protégé**
 >
@@ -18,30 +18,27 @@
 > - Pour chaque route, ajouter un test avec un compte autorisé et un test avec un compte refusé.
 
 ```python
-from typing import Any
-
 from fastapi import Depends
 
 from app.dependencies import get_current_user, require_roles
+from app.modules.auth.models import Role, User
 
 
 @router.get("/staff")
 async def staff_only(
-    user: dict[str, Any] = Depends(require_roles("doctor", "secretary")),
+    user: User = Depends(require_roles(Role.DOCTOR, Role.SECRETARY)),
 ) -> dict[str, str]:
-    return {"full_name": user["full_name"]}
+    return {"name": f"{user.first_name} {user.last_name}"}
 
 
 @router.get("/", response_model=list[ItemOut])
-async def list_items(user: dict[str, Any] = Depends(require_roles("doctor", "secretary", "admin"))):
+async def list_items(user: User = Depends(require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN))):
     ...
 
 
 @router.get("/me")
-async def current_profile(
-    user: dict[str, Any] = Depends(get_current_user),
-) -> dict[str, str]:
-    return {"id": str(user["_id"]), "role": user["role"]}
+async def current_profile(user: User = Depends(get_current_user)) -> dict[str, str]:
+    return {"id": str(user.id), "role": user.role.value}
 ```
 
 Pour une route recevant l'identifiant d'un dossier patient, vérifier la propriété du dossier :
@@ -53,21 +50,22 @@ from app.dependencies import get_current_user, owns_patient_record
 @router.get("/{patient_id}")
 async def get_patient(
     patient_id: str,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     owns_patient_record(user, patient_id)
     ...
 ```
 
-Pour le rôle patient, une valeur `users.patient_id` absente ou nulle ne donne accès à aucun dossier. Les rôles internes passent le contrôle de propriété ; protégez-les séparément par `require_roles` si nécessaire.
+Pour le rôle `PATIENT`, une valeur `users.patientId` absente ou nulle ne donne accès à aucun dossier. Les rôles internes passent le contrôle de propriété ; protégez-les séparément par `require_roles` si nécessaire.
 
 ## Contrats de données
 
 | Collection | Champ | Contrat |
 |---|---|---|
-| `users` | `patient_id` | Nullable ; identifiant du dossier lié, renseigné par l'action de liaison |
-| `patients` | `user_id` | Optionnel ; identifiant de l'utilisateur associé |
-| `documents` | `patient_id` | Chaîne contenant l'identifiant du dossier patient |
+| `users` | `patientId` | ObjectId nullable, uniquement pour le rôle `PATIENT` ; renseigné par `PATCH /api/users/{id}/link-patient` |
+| `medical_documents`, `appointments`, … | `patientId` | ObjectId du dossier `patients` (voir `database/mongo-init.js`) |
+
+Les noms de champs et les validateurs de toutes les collections sont définis dans `database/mongo-init.js` (source de vérité, camelCase en base, snake_case en Python).
 
 Chaque module ne lit et n'écrit que les collections dont il est propriétaire. **Aucun module n'écrit dans la collection d'un autre module.** Les liaisons entre collections sont faites par identifiants, sans création ou modification croisée de documents.
 

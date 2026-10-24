@@ -3,52 +3,47 @@ from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import dotenv_values
-from pydantic import AliasChoices, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 ProviderName = Literal["mock", "openai_compatible", "anthropic"]
+Environment = Literal["dev", "test", "prod"]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+MODULES_DIRECTORY = BACKEND_ROOT / "app" / "modules"
 INSECURE_JWT_SECRET = "CHANGE-ME-use-a-local-secret-of-at-least-32-characters"
-MODULES_DIRECTORY = Path(__file__).resolve().parent / "modules"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[1] / ".env",
+        env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
     )
 
+    env: Environment = "dev"
     llm_mock: bool = True
     llm_timeout_seconds: float = Field(default=20, gt=0)
-    mongo_uri: str = "mongodb://localhost:27017"
-    mongo_db: str = "mediflow"
+    # Must authenticate as mediflow_app (readWrite on mediflow), never as root.
+    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_db: str = "mediflow"
     cors_origins: str = "http://localhost:4200"
-    app_env: Literal["development", "production"] = Field(
-        default="development",
-        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
-    )
     expose_template: bool | None = None
     jwt_secret: str = INSECURE_JWT_SECRET
     jwt_expire_minutes: int = Field(default=60, gt=0)
-    admin_email: str | None = None
-    admin_password: str | None = None
-
-    @property
-    def environment(self) -> str:
-        return self.app_env
+    # Password of the accounts created by scripts/seed.py (empty: dev default)
+    seed_password: str | None = None
 
     def validate_runtime_configuration(self) -> None:
         secret = self.jwt_secret.strip()
-        if self.app_env == "production" and (
+        if self.env == "prod" and (
             not secret
             or len(secret) < 32
             or secret == INSECURE_JWT_SECRET
             or "CHANGE-ME" in secret.upper()
         ):
             raise ValueError(
-                "APP_ENV=production exige un JWT_SECRET défini, non factice et "
+                "ENV=prod exige un JWT_SECRET défini, non factice et "
                 "d'au moins 32 caractères."
             )
 
@@ -60,7 +55,7 @@ class Settings(BaseSettings):
     def should_expose_template(self) -> bool:
         if self.expose_template is not None:
             return self.expose_template
-        return self.environment == "development"
+        return self.env == "dev"
 
     def module_llm(self, module: str) -> tuple[ProviderName, str, str, str]:
         prefix = module.upper()
@@ -83,6 +78,3 @@ class Settings(BaseSettings):
 
 settings = Settings()
 settings.validate_runtime_configuration()
-
-
-settings = Settings()

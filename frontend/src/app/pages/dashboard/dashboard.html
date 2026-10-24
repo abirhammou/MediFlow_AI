@@ -1,0 +1,52 @@
+<div class="page">
+
+  @if (error()) {
+    <div class="alert" role="alert">{{ error() }}</div>
+  } @else if (summary(); as data) {
+    <section class="intro">
+      <h1>Bonjour, {{ data.full_name }} 👋</h1>
+      <p>Espace {{ roleLabel(data.role).toLowerCase() }} · voici votre résumé du jour.</p>
+    </section>
+
+    <section class="kpis" aria-label="Indicateurs">
+      @for (kpi of data.kpis; track kpi.key) {
+        <article class="kpi">
+          <h2>{{ kpi.label }}</h2>
+          @if (isBreakdown(kpi.value)) {
+            <ul class="breakdown">
+              @for (item of breakdown(kpi.value); track item.label) {
+                <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+              }
+            </ul>
+          } @else {
+            <p class="value">{{ kpi.value }}</p>
+          }
+        </article>
+      }
+    </section>
+
+    @if (data.alerts.length) {
+      <section class="alerts" aria-label="À suivre">
+        <h2>À suivre</h2>
+        <ul>
+          @for (alert of data.alerts; track $index) {
+            <li class="item">
+              <span class="item-icon"><app-icon [name]="alert.start_at ? 'calendar' : 'activity'" [size]="18" /></span>
+              @if (alert.start_at) {
+                <div>
+                  <strong>{{ formatDate(alert.start_at) }}</strong>
+                  <p>{{ alert.reason || 'Rendez-vous' }} · {{ statusLabel(alert.status) }}</p>
+                </div>
+              } @else {
+                <p>{{ alert.message }}</p>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  } @else {
+    <p class="loading">Chargement du tableau de bord…</p>
+  }
+
+</div>

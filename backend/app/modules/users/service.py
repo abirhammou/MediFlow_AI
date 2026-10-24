@@ -1,223 +1,127 @@
-from typing import Any
-
-from bson import ObjectId
+from beanie import PydanticObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
-from app.common.roles import Role, UserStatus
+from app.core.models import normalize_email
 from app.errors import APIError
+from app.modules.auth.models import Role, User
+from app.modules.auth.repository import get_user_by_id
+from app.modules.patients.repository import get_patient
+from app.modules.users import repository
+from app.modules.users.schemas import UserCreateRequest, UserListResponse, UserResponse
 from app.security import hash_password
-from app.modules.users.repository import UsersRepository
-from app.modules.users.schemas import (
-    UserCreateRequest,
-    UserListResponse,
-    UserResponse,
-)
 
 
 class UsersService:
-    def __init__(self, repository: UsersRepository) -> None:
-        self.repository = repository
-
     async def list_users(
         self,
         *,
-        user_status: UserStatus | None,
+        is_active: bool | None,
         role: Role | None,
         page: int,
         size: int,
     ) -> UserListResponse:
-        filters: dict[str, str] = {}
-        if user_status is not None:
-            filters["status"] = user_status.value
-        if role is not None:
-            filters["role"] = role.value
-        users, total = await self.repository.list_users(
-            filters,
+        users, total = await repository.list_users(
+            is_active=is_active,
+            role=role,
             skip=(page - 1) * size,
             limit=size,
         )
         return UserListResponse(
-            items=[self._response(user) for user in users],
+            items=[UserResponse.from_user(user) for user in users],
             total=total,
             page=page,
             size=size,
         )
 
     async def get_user(self, user_id: str) -> UserResponse:
-        user = await self.repository.get_by_id(self._parse_id(user_id))
-        if user is None:
-            raise self._not_found()
-        return self._response(user)
+        return UserResponse.from_user(await self._get_user(user_id))
 
     async def create_user(self, request: UserCreateRequest) -> UserResponse:
-        email = request.email.strip().lower()
-        full_name = request.full_name.strip()
-        if not full_name:
-            raise APIError(422, "invalid_full_name", "Le nom complet est obligatoire.")
+        first_name, last_name = request.first_name.strip(), request.last_name.strip()
+        if not first_name or not last_name:
+            raise APIError(422, "invalid_name", "Le prénom et le nom sont obligatoires.")
+        user = User(
+            email=normalize_email(request.email),
+            password_hash=hash_password(request.password),
+            first_name=first_name,
+            last_name=last_name,
+            role=request.role,
+        )
         try:
-            user = await self.repository.create(
-                email=email,
-                full_name=full_name,
-                password_hash=hash_password(request.password),
-                role=request.role.value,
-            )
+            await user.insert()
         except DuplicateKeyError:
             raise APIError(409, "email_exists", "Cette adresse email est déjà utilisée.") from None
-        return self._response(user)
+        return UserResponse.from_user(user)
 
-    async def approve(self, user_id: str) -> UserResponse:
-        return await self._update_status(
-            user_id,
-            UserStatus.PENDING,
-            {"status": UserStatus.ACTIVE.value},
-            "Seul un compte en attente peut être approuvé.",
-        )
+    async def activate(self, user_id: str) -> UserResponse:
+        """Approve a pending account or re-enable a disabled one (both are `is_active = False`)."""
+        target = await self._get_user(user_id)
+        if target.is_active:
+            raise APIError(400, "already_active", "Le compte est déjà actif.")
+        target.is_active = True
+        target.failed_login_attempts = 0
+        target.locked_until = None
+        await target.save()
+        return UserResponse.from_user(target)
 
-    async def disable(
-        self,
-        user_id: str,
-        acting_user: dict[str, Any],
-    ) -> UserResponse:
-        target = await self._get_raw_user(user_id)
-        self._prevent_self_deactivation(target, acting_user)
-        await self._prevent_last_active_admin(target, {"status": UserStatus.DISABLED.value})
-        updated = await self.repository.update_fields(
-            target["_id"],
-            {"status": UserStatus.DISABLED.value},
-        )
-        if updated is None:
-            raise self._not_found()
-        return self._response(updated)
+    async def disable(self, user_id: str, acting_user: User) -> UserResponse:
+        target = await self._get_user(user_id)
+        if target.id == acting_user.id:
+            raise APIError(400, "self_deactivation", "Un administrateur ne peut pas se désactiver.")
+        await self._prevent_last_active_admin(target, new_role=target.role, new_active=False)
+        target.is_active = False
+        await target.save()
+        return UserResponse.from_user(target)
 
-    async def enable(self, user_id: str) -> UserResponse:
-        return await self._update_status(
-            user_id,
-            UserStatus.DISABLED,
-            {"status": UserStatus.ACTIVE.value},
-            "Seul un compte désactivé peut être réactivé.",
-        )
-
-    async def change_role(
-        self,
-        user_id: str,
-        role: Role,
-        acting_user: dict[str, Any],
-    ) -> UserResponse:
-        target = await self._get_raw_user(user_id)
-        if (
-            target["_id"] == acting_user["_id"]
-            and target["role"] == Role.ADMIN
-            and role != Role.ADMIN
-        ):
+    async def change_role(self, user_id: str, role: Role, acting_user: User) -> UserResponse:
+        target = await self._get_user(user_id)
+        if target.id == acting_user.id and target.role == Role.ADMIN and role != Role.ADMIN:
             raise APIError(400, "self_admin_role", "Un administrateur ne peut pas retirer son propre rôle.")
-        fields = {"role": role.value}
-        await self._prevent_last_active_admin(target, fields)
-        updated = await self.repository.update_fields(target["_id"], fields)
-        if updated is None:
-            raise self._not_found()
-        return self._response(updated)
-
-    async def delete(
-        self,
-        user_id: str,
-        acting_user: dict[str, Any],
-    ) -> UserResponse:
-        return await self.disable(user_id, acting_user)
+        await self._prevent_last_active_admin(target, new_role=role, new_active=target.is_active)
+        target.role = role
+        if role != Role.PATIENT:
+            target.patient_id = None
+        await target.save()
+        return UserResponse.from_user(target)
 
     async def link_patient(self, user_id: str, patient_id: str) -> UserResponse:
-        target = await self._get_raw_user(user_id)
-        updated = await self.repository.update_fields(
-            target["_id"],
-            {"patient_id": patient_id},
-        )
-        if updated is None:
-            raise self._not_found()
-        return self._response(updated)
+        target = await self._get_user(user_id)
+        if target.role != Role.PATIENT:
+            raise APIError(400, "not_a_patient", "Seul un compte patient peut être lié à un dossier.")
+        try:
+            patient = await get_patient(PydanticObjectId(patient_id))
+        except (InvalidId, TypeError):
+            patient = None
+        if patient is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier patient introuvable.")
+        target.patient_id = patient.id
+        await target.save()
+        return UserResponse.from_user(target)
 
     async def unlink_patient(self, user_id: str) -> UserResponse:
-        target = await self._get_raw_user(user_id)
-        updated = await self.repository.update_fields(
-            target["_id"],
-            {"patient_id": None},
-        )
-        if updated is None:
-            raise self._not_found()
-        return self._response(updated)
+        target = await self._get_user(user_id)
+        target.patient_id = None
+        await target.save()
+        return UserResponse.from_user(target)
 
-    async def _update_status(
-        self,
-        user_id: str,
-        expected_status: UserStatus,
-        fields: dict[str, str],
-        error_detail: str,
-    ) -> UserResponse:
-        parsed_id = self._parse_id(user_id)
-        updated = await self.repository.update_if_status(
-            parsed_id,
-            expected_status.value,
-            fields,
-        )
-        if updated is None:
-            if await self.repository.get_by_id(parsed_id) is None:
-                raise self._not_found()
-            raise APIError(400, "invalid_user_status", error_detail)
-        return self._response(updated)
-
-    async def _get_raw_user(self, user_id: str) -> dict[str, Any]:
-        user = await self.repository.get_by_id(self._parse_id(user_id))
+    @staticmethod
+    async def _get_user(user_id: str) -> User:
+        try:
+            user = await get_user_by_id(PydanticObjectId(user_id))
+        except (InvalidId, TypeError):
+            user = None
         if user is None:
-            raise self._not_found()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
         return user
 
-    async def _prevent_last_active_admin(
-        self,
-        target: dict[str, Any],
-        changes: dict[str, Any],
-    ) -> None:
+    @staticmethod
+    async def _prevent_last_active_admin(target: User, *, new_role: Role, new_active: bool) -> None:
         if (
-            target.get("role") == Role.ADMIN
-            and target.get("status") == UserStatus.ACTIVE
-            and (
-                changes.get("role", Role.ADMIN.value) != Role.ADMIN.value
-                or changes.get("status", UserStatus.ACTIVE.value) != UserStatus.ACTIVE.value
-            )
-            and await self.repository.count_active_admins() <= 1
+            target.role == Role.ADMIN
+            and target.is_active
+            and (new_role != Role.ADMIN or not new_active)
+            and await repository.count_active_admins() <= 1
         ):
             raise APIError(400, "last_admin", "Le dernier administrateur actif ne peut pas être désactivé.")
-
-    @staticmethod
-    def _prevent_self_deactivation(
-        target: dict[str, Any],
-        acting_user: dict[str, Any],
-    ) -> None:
-        if target["_id"] == acting_user["_id"]:
-            raise APIError(400, "self_deactivation", "Un administrateur ne peut pas se désactiver.")
-
-    @staticmethod
-    def _parse_id(user_id: str) -> ObjectId:
-        try:
-            return ObjectId(user_id)
-        except (InvalidId, TypeError):
-            raise UsersService._not_found() from None
-
-    @staticmethod
-    def _not_found() -> HTTPException:
-        return HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur introuvable.",
-        )
-
-    @staticmethod
-    def _response(user: dict[str, Any]) -> UserResponse:
-        patient_id = user.get("patient_id")
-        return UserResponse(
-            id=str(user["_id"]),
-            email=user["email"],
-            full_name=user["full_name"],
-            role=user["role"],
-            status=user["status"],
-            patient_id=str(patient_id) if patient_id is not None else None,
-            created_at=user["created_at"],
-        )

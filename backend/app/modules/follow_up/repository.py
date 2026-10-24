@@ -1,13 +1,13 @@
 from typing import Any
 
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.modules.follow_up.schemas import TaskCreate, TaskStatus, TaskUpdate
 
 
 class TaskRepository:
-    def __init__(self, database: AsyncIOMotorDatabase) -> None:
+    def __init__(self, database: AsyncDatabase) -> None:
         self.collection = database["followup_tasks"]
 
     async def create(self, task: TaskCreate) -> dict[str, Any]:

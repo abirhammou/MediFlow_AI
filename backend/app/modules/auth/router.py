@@ -1,29 +1,24 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
-from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.database import get_db
 from app.dependencies import get_current_user
-from app.modules.auth.repository import AuthRepository
+from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     LoginResponse,
-    RegistrationResponse,
     RegisterRequest,
+    RegistrationResponse,
     UserProfile,
 )
 from app.modules.auth.service import AuthService
-
 
 router = APIRouter()
 TAGS = ["auth"]
 LLM_ENABLED = False
 
 
-def get_auth_service(
-    database: AsyncIOMotorDatabase = Depends(get_db),
-) -> AuthService:
-    return AuthService(AuthRepository(database))
+def get_auth_service() -> AuthService:
+    return AuthService()
 
 
 @router.post(
@@ -43,21 +38,19 @@ async def login(
     form: OAuth2PasswordRequestForm = Depends(),
     service: AuthService = Depends(get_auth_service),
 ) -> LoginResponse:
+    """Form fields `username` (the email) and `password`, as expected by OAuth2 / Swagger."""
     return await service.login(form.username, form.password)
 
 
 @router.get("/me", response_model=UserProfile)
-async def me(
-    user: dict = Depends(get_current_user),
-    service: AuthService = Depends(get_auth_service),
-) -> UserProfile:
-    return service.profile(user)
+async def me(user: User = Depends(get_current_user)) -> UserProfile:
+    return UserProfile.from_user(user)
 
 
 @router.post("/change-password")
 async def change_password(
     request: ChangePasswordRequest,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
 ) -> dict[str, str]:
     return await service.change_password(user, request)

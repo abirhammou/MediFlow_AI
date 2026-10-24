@@ -3,11 +3,10 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from app.config import settings
+from app.core.config import settings
 from app.errors import LLMResponseError
 from app.llm.anonymizer import anonymize
 from app.llm.registry import provider_for
-
 
 T = TypeVar("T", bound=BaseModel)
 

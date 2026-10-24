@@ -1,113 +1,106 @@
-from datetime import UTC, datetime
-from typing import Any
+from datetime import timedelta
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
-from app.common.roles import Role, UserStatus
+from app.core.models import normalize_email
+from app.core.time import utcnow
 from app.errors import APIError
-from app.security import create_access_token, hash_password, verify_password
-from app.modules.auth.repository import AuthRepository
+from app.modules.auth.models import Role, User
+from app.modules.auth.repository import get_user_by_email
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     LoginResponse,
-    RegistrationResponse,
     RegisterRequest,
+    RegistrationResponse,
     UserProfile,
 )
+from app.security import create_access_token, hash_password, verify_password
+
+MAX_FAILED_LOGINS = 5
+LOCK_DURATION = timedelta(minutes=15)
+# Self-registration: patients are active at once, staff accounts wait for an admin.
+SELF_REGISTER_ROLES = {Role.PATIENT, Role.DOCTOR, Role.SECRETARY}
 
 
 class AuthService:
-    def __init__(self, repository: AuthRepository) -> None:
-        self.repository = repository
-
     async def register(self, request: RegisterRequest) -> RegistrationResponse:
-        requested_role = request.role_requested or Role.PATIENT.value
-        if requested_role == Role.ADMIN:
-            raise APIError(403, "role_forbidden", "La création d'un compte administrateur est interdite.")
-        if requested_role not in {Role.PATIENT, Role.DOCTOR, Role.SECRETARY}:
-            raise APIError(400, "invalid_role", "Le rôle demandé n'est pas valide.")
+        role = Role(request.role_requested or Role.PATIENT)
+        if role not in SELF_REGISTER_ROLES:
+            raise APIError(403, "role_forbidden", "Ce rôle ne peut pas être demandé à l'inscription.")
 
-        email = request.email.strip().lower()
-        full_name = request.full_name.strip()
-        if not full_name:
-            raise APIError(422, "invalid_full_name", "Le nom complet est obligatoire.")
-        # Le dossier patient (collection patients) est géré par le module patients. Le lien se fait via users.patient_id.
-        active = requested_role == Role.PATIENT
+        first_name, last_name = request.first_name.strip(), request.last_name.strip()
+        if not first_name or not last_name:
+            raise APIError(422, "invalid_name", "Le prénom et le nom sont obligatoires.")
+        # The patient record (patients collection) is created by the staff and linked via users.patientId.
+        active = role == Role.PATIENT
+        user = User(
+            email=normalize_email(request.email),
+            password_hash=hash_password(request.password),
+            first_name=first_name,
+            last_name=last_name,
+            role=role,
+            is_active=active,
+        )
         try:
-            user = await self.repository.register(
-                email=email,
-                full_name=full_name,
-                password_hash=hash_password(request.password),
-                role=requested_role,
-                status=UserStatus.ACTIVE if active else UserStatus.PENDING,
-                created_at=datetime.now(UTC),
-            )
+            await user.insert()
         except DuplicateKeyError:
             raise APIError(409, "email_exists", "Cette adresse email est déjà utilisée.") from None
 
-        profile = self._profile(user)
         detail = (
             "Compte créé."
             if active
             else "Compte créé ; une approbation est nécessaire avant la connexion."
         )
-        return RegistrationResponse(**profile.model_dump(), detail=detail)
+        return RegistrationResponse(**UserProfile.from_user(user).model_dump(), detail=detail)
 
     async def login(self, email: str, password: str) -> LoginResponse:
-        user = await self.repository.get_by_email(email.strip().lower())
-        if user is None or not verify_password(password, user["password_hash"]):
+        user = await get_user_by_email(email)
+        now = utcnow()
+        if user is not None and user.locked_until is not None and user.locked_until > now:
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Trop de tentatives échouées. Réessayez dans quelques minutes.",
+            )
+        if user is None or not verify_password(password, user.password_hash):
+            if user is not None:
+                await self._record_failure(user)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Email ou mot de passe incorrect.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        if user["status"] == UserStatus.PENDING:
+        if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Compte en attente d'approbation.",
-            )
-        if user["status"] == UserStatus.DISABLED:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Compte désactivé.",
+                detail="Compte inactif ou en attente d'approbation.",
             )
 
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.last_login_at = now
+        await user.save()
         return LoginResponse(
-            access_token=create_access_token(str(user["_id"]), user["role"]),
-            role=user["role"],
-            status=user["status"],
-            full_name=user["full_name"],
+            access_token=create_access_token(str(user.id), user.role.value),
+            role=user.role,
+            first_name=user.first_name,
+            last_name=user.last_name,
         )
 
-    def profile(self, user: dict[str, Any]) -> UserProfile:
-        return self._profile(user)
-
-    async def change_password(
-        self,
-        user: dict[str, Any],
-        request: ChangePasswordRequest,
-    ) -> dict[str, str]:
-        if not verify_password(request.current_password, user["password_hash"]):
+    async def change_password(self, user: User, request: ChangePasswordRequest) -> dict[str, str]:
+        if not verify_password(request.current_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Le mot de passe actuel est incorrect.",
             )
-        await self.repository.update_password(
-            user["_id"],
-            hash_password(request.new_password),
-        )
+        user.password_hash = hash_password(request.new_password)
+        await user.save()
         return {"detail": "Mot de passe modifié."}
 
     @staticmethod
-    def _profile(user: dict[str, Any]) -> UserProfile:
-        patient_id = user.get("patient_id")
-        return UserProfile(
-            id=str(user["_id"]),
-            email=user["email"],
-            full_name=user["full_name"],
-            role=user["role"],
-            status=user["status"],
-            patient_id=str(patient_id) if patient_id is not None else None,
-            created_at=user["created_at"],
-        )
+    async def _record_failure(user: User) -> None:
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= MAX_FAILED_LOGINS:
+            user.failed_login_attempts = 0
+            user.locked_until = utcnow() + LOCK_DURATION
+        await user.save()

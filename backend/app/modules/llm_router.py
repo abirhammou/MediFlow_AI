@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.modules.discovery import discover_module_names
 from app.llm.registry import status
+from app.modules.discovery import discover_module_names
 
 router = APIRouter()
 

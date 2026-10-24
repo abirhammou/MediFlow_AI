@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
-from app.database import get_db
+from app.core.db import get_db
 from app.modules._template.repository import NoteRepository
 from app.modules._template.schemas import (
     NoteCreate,
@@ -17,7 +17,7 @@ PREFIX = "/api/notes"
 TAGS = ["notes"]
 
 
-def get_note_service(database: AsyncIOMotorDatabase = Depends(get_db)) -> NoteService:
+def get_note_service(database: AsyncDatabase = Depends(get_db)) -> NoteService:
     return NoteService(NoteRepository(database))
 
 

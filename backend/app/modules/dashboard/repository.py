@@ -1,77 +1,43 @@
 from datetime import datetime
-from typing import Any
 
-from bson import ObjectId
-from bson.errors import InvalidId
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from beanie import PydanticObjectId
+from beanie.operators import GTE, LT, NE, Eq
 
-
-APPOINTMENT_DATE_FIELDS = (
-    "scheduled_at",
-    "start_at",
-    "starts_at",
-    "appointment_date",
-    "date",
-)
+from app.modules.appointments.models import Appointment, AppointmentStatus
+from app.modules.auth.models import Role, User
+from app.modules.patients.models import Patient
 
 
-class DashboardRepository:
-    def __init__(self, database: AsyncIOMotorDatabase) -> None:
-        self.database = database
+async def count_users(*, is_active: bool | None = None) -> int:
+    filters = [] if is_active is None else [Eq(User.is_active, is_active)]
+    return await User.find(*filters).count()
 
-    async def count_users(self, query: dict[str, Any] | None = None) -> int:
-        return await self.database["users"].count_documents(query or {})
 
-    async def count_users_by_role(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for role in ("admin", "doctor", "secretary", "patient"):
-            counts[role] = await self.count_users({"role": role})
-        return counts
+async def count_users_by_role() -> dict[str, int]:
+    return {role.value: await User.find(Eq(User.role, role)).count() for role in Role}
 
-    async def count_patients(self) -> int:
-        return await self.database["patients"].count_documents({})
 
-    async def count_appointments_between(
-        self,
-        start: datetime,
-        end: datetime,
-    ) -> int:
-        bounds = [
-            {field: {"$gte": start, "$lt": end}}
-            for field in APPOINTMENT_DATE_FIELDS
-        ]
-        return await self.database["appointments"].count_documents({"$or": bounds})
+async def count_patients() -> int:
+    return await Patient.find(Eq(Patient.deleted_at, None)).count()
 
-    async def upcoming_appointments(
-        self,
-        patient_id: str | ObjectId,
-        from_date: datetime,
-    ) -> list[dict[str, Any]]:
-        patient_ids: list[str | ObjectId] = [str(patient_id)]
-        try:
-            patient_ids.append(ObjectId(str(patient_id)))
-        except InvalidId:
-            pass
 
-        date_queries = [
-            {field: {"$gte": from_date}}
-            for field in APPOINTMENT_DATE_FIELDS
-        ]
-        cursor = self.database["appointments"].find(
-            {
-                "patient_id": {"$in": patient_ids},
-                "$or": date_queries,
-            },
-            {
-                "_id": 1,
-                "patient_id": 1,
-                "scheduled_at": 1,
-                "start_at": 1,
-                "starts_at": 1,
-                "appointment_date": 1,
-                "date": 1,
-                "status": 1,
-                "reason": 1,
-            },
-        )
-        return await cursor.to_list(length=100)
+async def count_appointments_between(start: datetime, end: datetime) -> int:
+    return await Appointment.find(
+        GTE(Appointment.start_at, start),
+        LT(Appointment.start_at, end),
+        NE(Appointment.status, AppointmentStatus.CANCELLED),
+    ).count()
+
+
+async def upcoming_appointments(
+    patient_id: PydanticObjectId,
+    from_date: datetime,
+    limit: int = 5,
+) -> tuple[list[Appointment], int]:
+    query = Appointment.find(
+        Eq(Appointment.patient_id, patient_id),
+        GTE(Appointment.start_at, from_date),
+        NE(Appointment.status, AppointmentStatus.CANCELLED),
+    )
+    total = await query.count()
+    return await query.sort(+Appointment.start_at).limit(limit).to_list(), total

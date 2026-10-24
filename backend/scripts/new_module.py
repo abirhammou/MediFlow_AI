@@ -3,7 +3,6 @@ import re
 import shutil
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MODULE_NAME_PATTERN = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 ENV_SUFFIXES = ("PROVIDER", "BASE_URL", "MODEL", "API_KEY")

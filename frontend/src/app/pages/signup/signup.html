@@ -1,10 +1,21 @@
 <app-auth-layout title="Créer un compte" subtitle="Rejoignez MediFlow AI et prenez soin de votre santé">
   <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-    <div class="field">
-      <label for="fullName">Nom complet</label>
-      <input id="fullName" class="input" formControlName="fullName" autocomplete="name"
-             placeholder="Votre nom et prénom" [class.invalid]="invalid('fullName')" />
-      @if (invalid('fullName')) { <span class="error">Saisissez votre nom complet.</span> }
+    @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+
+    <div class="name-row">
+      <div class="field">
+        <label for="firstName">Prénom</label>
+        <input id="firstName" class="input" formControlName="firstName" autocomplete="given-name"
+               placeholder="Votre prénom" [class.invalid]="invalid('firstName')" />
+        @if (invalid('firstName')) { <span class="error">Saisissez votre prénom.</span> }
+      </div>
+
+      <div class="field">
+        <label for="lastName">Nom</label>
+        <input id="lastName" class="input" formControlName="lastName" autocomplete="family-name"
+               placeholder="Votre nom" [class.invalid]="invalid('lastName')" />
+        @if (invalid('lastName')) { <span class="error">Saisissez votre nom.</span> }
+      </div>
     </div>
 
     <div class="field">
@@ -50,7 +61,9 @@
       @if (invalid('terms')) { <span class="error">Vous devez accepter les conditions pour continuer.</span> }
     </div>
 
-    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">Créer mon compte</button>
+    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Création du compte…' : 'Créer mon compte' }}
+    </button>
 
     <p class="switch">Vous avez déjà un compte ? <a routerLink="/login">Se connecter</a></p>
   </form>

@@ -1,174 +1,127 @@
-from datetime import UTC, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
+from app.core.sequence import next_record_number
+from app.core.time import utc_midnight, utcnow
+from app.modules.appointments.models import Appointment, AppointmentStatus
+from app.modules.auth.models import Role, User
+from app.modules.patients.models import Gender, Patient
 
-@pytest.mark.asyncio
-async def test_admin_dashboard_summary(client, mock_database, user_factory, token_factory):
-    admin = await user_factory(email="admin@example.test", role="admin")
-    await user_factory(
-        email="pending@example.test",
-        role="doctor",
-        status="pending",
-    )
-    headers = {"Authorization": f"Bearer {token_factory(str(admin['_id']), 'admin')}"}
 
-    response = await client.get("/api/dashboard/summary", headers=headers)
+@pytest.fixture
+def auth(token_factory):
+    def headers(user: User) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token_factory(user)}"}
+
+    return headers
+
+
+async def make_patient(**fields) -> Patient:
+    return await Patient(
+        record_number=await next_record_number(),
+        first_name="Leila",
+        last_name="Haddad",
+        date_of_birth=date(1990, 5, 1),
+        gender=Gender.FEMALE,
+        **fields,
+    ).insert()
+
+
+async def make_appointment(patient: Patient, doctor: User, start_at, **fields) -> Appointment:
+    return await Appointment(
+        patient_id=patient.id,
+        doctor_id=doctor.id,
+        start_at=start_at,
+        end_at=start_at + timedelta(minutes=30),
+        **fields,
+    ).insert()
+
+
+async def summary(api_client, headers):
+    response = await api_client.get("/api/dashboard/summary", headers=headers)
     body = response.json()
-    metrics = {item["key"]: item["value"] for item in body["kpis"]}
+    return response, body, {item["key"]: item["value"] for item in body.get("kpis", [])}
+
+
+async def test_admin_dashboard_summary(api_client, user_factory, auth):
+    admin = await user_factory(email="admin@example.test", role=Role.ADMIN)
+    await user_factory(email="pending@example.test", role=Role.DOCTOR, is_active=False)
+
+    response, body, metrics = await summary(api_client, auth(admin))
 
     assert response.status_code == 200
-    assert body["role"] == "admin"
+    assert body["role"] == "ADMIN"
     assert body["full_name"] == "Test User"
     assert metrics["total_users"] == 2
-    assert metrics["pending_users"] == 1
-    assert metrics["users_by_role"]["admin"] == 1
-    assert metrics["users_by_role"]["doctor"] == 1
+    assert metrics["inactive_users"] == 1
+    assert metrics["users_by_role"]["ADMIN"] == metrics["users_by_role"]["DOCTOR"] == 1
+    assert metrics["users_by_role"]["PATIENT"] == 0
     assert body["alerts"] == []
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("role", ["doctor", "secretary"])
+@pytest.mark.parametrize("role", [Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF])
 async def test_staff_dashboard_counts_patients_and_today_appointments(
-    client,
-    mock_database,
-    user_factory,
-    token_factory,
-    role,
+    api_client, user_factory, auth, role
 ):
-    staff = await user_factory(email=f"{role}@example.test", role=role)
-    await mock_database["patients"].insert_one({"full_name": "Patient"})
-    today = datetime.now(UTC)
-    await mock_database["appointments"].insert_one(
-        {"scheduled_at": today + timedelta(hours=1)},
-    )
-    await mock_database["appointments"].insert_one(
-        {"scheduled_at": today - timedelta(days=1)},
-    )
-    headers = {"Authorization": f"Bearer {token_factory(str(staff['_id']), role)}"}
+    staff = await user_factory(email="staff@example.test", role=role)
+    doctor = await user_factory(email="doctor@example.test", role=Role.DOCTOR)
+    patient = await make_patient()
+    await make_patient(deleted_at=utcnow())
+    noon = utc_midnight(utcnow().date()) + timedelta(hours=12)
+    await make_appointment(patient, doctor, noon)
+    await make_appointment(patient, doctor, noon + timedelta(hours=1), status=AppointmentStatus.CANCELLED)
+    await make_appointment(patient, doctor, noon - timedelta(days=1))
 
-    response = await client.get("/api/dashboard/summary", headers=headers)
-    body = response.json()
-    metrics = {item["key"]: item["value"] for item in body["kpis"]}
+    response, body, metrics = await summary(api_client, auth(staff))
 
     assert response.status_code == 200
-    assert body["role"] == role
+    assert body["role"] == role.value
     assert metrics == {"patients": 1, "appointments_today": 1}
-    assert body["alerts"] == []
 
 
-@pytest.mark.asyncio
 async def test_patient_dashboard_lists_only_own_upcoming_appointments(
-    client,
-    mock_database,
-    user_factory,
-    token_factory,
+    api_client, user_factory, auth
 ):
-    patient_id = "patient-record-1"
-    patient = await user_factory(
-        email="patient@example.test",
-        role="patient",
-        patient_id=patient_id,
-    )
-    now = datetime.now(UTC)
-    await mock_database["appointments"].insert_one(
-        {
-            "patient_id": patient_id,
-            "scheduled_at": now + timedelta(days=2),
-            "reason": "Consultation",
-            "private_note": "Must not be exposed",
-        },
-    )
-    await mock_database["appointments"].insert_one(
-        {
-            "patient_id": "another-patient",
-            "scheduled_at": now + timedelta(days=1),
-            "reason": "Other patient's appointment",
-        },
-    )
-    headers = {"Authorization": f"Bearer {token_factory(str(patient['_id']), 'patient')}"}
+    doctor = await user_factory(email="doctor@example.test", role=Role.DOCTOR)
+    own, other = await make_patient(), await make_patient()
+    account = await user_factory(email="patient@example.test", role=Role.PATIENT, patient_id=own.id)
+    now = utcnow()
+    await make_appointment(own, doctor, now + timedelta(days=2), reason="Consultation")
+    await make_appointment(own, doctor, now - timedelta(days=2), reason="Past")
+    await make_appointment(other, doctor, now + timedelta(days=1), reason="Other patient")
 
-    response = await client.get("/api/dashboard/summary", headers=headers)
-    body = response.json()
-    appointment = body["alerts"][0]
+    response, body, metrics = await summary(api_client, auth(account))
 
     assert response.status_code == 200
-    assert body["role"] == "patient"
-    assert body["kpis"][0]["value"] == 1
-    assert len(body["alerts"]) == 1
-    assert appointment["reason"] == "Consultation"
-    assert "private_note" not in appointment
-    assert "patient_id" not in appointment
+    assert body["role"] == "PATIENT"
+    assert metrics["upcoming_appointments"] == 1
+    assert [alert["reason"] for alert in body["alerts"]] == ["Consultation"]
+    assert "patient_id" not in body["alerts"][0]
 
 
-@pytest.mark.asyncio
-async def test_unlinked_patient_gets_message_and_empty_appointment_list(
-    client,
-    mock_database,
-    user_factory,
-    token_factory,
-):
-    patient = await user_factory(email="unlinked@example.test", role="patient")
-    headers = {"Authorization": f"Bearer {token_factory(str(patient['_id']), 'patient')}"}
-    await mock_database["appointments"].insert_one(
-        {
-            "patient_id": "some-patient",
-            "scheduled_at": datetime.now(UTC) + timedelta(days=1),
-        },
-    )
+async def test_unlinked_patient_gets_message(api_client, user_factory, auth):
+    account = await user_factory(email="unlinked@example.test", role=Role.PATIENT)
 
-    response = await client.get("/api/dashboard/summary", headers=headers)
+    response, body, metrics = await summary(api_client, auth(account))
 
     assert response.status_code == 200
-    assert response.json()["kpis"][0]["value"] == 0
-    assert response.json()["alerts"] == [
-        {
-            "key": "patient_record_unlinked",
-            "message": "Dossier patient non lié, contactez l'accueil",
-        },
+    assert metrics["upcoming_appointments"] == 0
+    assert body["alerts"] == [
+        {"key": "patient_record_unlinked", "message": "Dossier patient non lié, contactez l'accueil"}
     ]
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("account_status", ["pending", "disabled"])
-async def test_non_active_accounts_are_rejected_even_with_valid_token(
-    client,
-    user_factory,
-    token_factory,
-    account_status,
-):
-    user = await user_factory(
-        email=f"{account_status}@example.test",
-        status=account_status,
-    )
-    headers = {"Authorization": f"Bearer {token_factory(str(user['_id']), 'patient')}"}
+async def test_inactive_account_is_rejected_even_with_valid_token(api_client, user_factory, auth):
+    user = await user_factory(email="inactive@example.test", is_active=False)
 
-    response = await client.get("/api/dashboard/summary", headers=headers)
+    response = await api_client.get("/api/dashboard/summary", headers=auth(user))
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Le compte n'est pas actif."
 
 
-@pytest.mark.asyncio
-async def test_dashboard_requires_authentication(client):
-    response = await client.get("/api/dashboard/summary")
+async def test_dashboard_requires_authentication(api_client):
+    response = await api_client.get("/api/dashboard/summary")
 
     assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("role", ["doctor", "secretary"])
-async def test_missing_collections_are_reported_as_zero(
-    client,
-    user_factory,
-    token_factory,
-    role,
-):
-    user = await user_factory(email=f"{role}@example.test", role=role)
-    headers = {"Authorization": f"Bearer {token_factory(str(user['_id']), role)}"}
-
-    response = await client.get("/api/dashboard/summary", headers=headers)
-    metrics = {item["key"]: item["value"] for item in response.json()["kpis"]}
-
-    assert response.status_code == 200
-    assert metrics == {"patients": 0, "appointments_today": 0}

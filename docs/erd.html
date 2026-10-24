@@ -1,0 +1,236 @@
+<title>MediFlow AI ERD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: one reading column — header, module legend, full-width scrollable diagram, notes */
+:root{
+  --bg:#f5f7f7; --surface:#ffffff; --fg:#17262b; --muted:#5a6b70; --line:#d6dfe0;
+  --accent:#0f7a7a; --accent-soft:#e1f0ef;
+  --display:"Fraunces", Georgia, serif;
+  --body:"IBM Plex Sans", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1719; --surface:#162226; --fg:#e3ecec; --muted:#93a6aa; --line:#2a3b3f;
+  --accent:#4fc2bd; --accent-soft:#163633; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0f1719; --surface:#162226; --fg:#e3ecec; --muted:#93a6aa; --line:#2a3b3f;
+  --accent:#4fc2bd; --accent-soft:#163633; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-block:40px 64px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-direction:column;gap:8px;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.1;margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted)}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.mod{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.mod b{font-weight:600;font-size:14px}
+.mod code{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-word}
+.mod.own{border-color:var(--accent);background:var(--accent-soft)}
+.mod.own b::after{content:"  your module";font-family:var(--mono);font-size:11px;font-weight:400;color:var(--accent)}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;overflow-x:auto}
+.diagram pre{margin:0;min-width:900px}
+.key{font-size:13px;color:var(--muted);margin:0}
+.key code{font-family:var(--mono);font-size:12px}
+.notes{max-width:72ch;display:flex;flex-direction:column;gap:6px}
+.notes h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 4px}
+.notes ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.notes code{font-family:var(--mono);font-size:13px}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">MongoDB 7 · 14 collections · $jsonSchema validated</span>
+    <h1>MediFlow AI — data model</h1>
+    <p>Auth plus the six modules from the project deck. Every AI output goes through a DRAFT → VALIDATED review before it counts, and every LLM call is logged.</p>
+  </header>
+
+  <section class="legend" aria-label="Collections by module">
+    <div class="mod"><b>Auth</b><code>users (+ doctorProfile) · refresh_tokens · counters</code></div>
+    <div class="mod own"><b>Patient Records AI</b><code>patients · patient_summaries</code></div>
+    <div class="mod"><b>Appointment Manager AI</b><code>appointments · appointment_requests</code></div>
+    <div class="mod"><b>ReportWriter AI</b><code>medical_reports</code></div>
+    <div class="mod"><b>MedDoc AI</b><code>medical_documents (+ extractedFields) · document_categories</code></div>
+    <div class="mod"><b>FollowUp AI</b><code>followup_tasks · reminders</code></div>
+    <div class="mod"><b>ClinicFAQ AI</b><code>faq_entries</code></div>
+    <div class="mod"><b>Cross-cutting</b><code>llm_interactions</code></div>
+  </section>
+
+  <div class="diagram">
+<pre class="mermaid">
+erDiagram
+  USERS ||--o{ REFRESH_TOKENS : "userId"
+  USERS ||--o| DOCTOR_PROFILE : "embeds"
+  DOCTOR_PROFILE ||--o{ AVAILABILITY : "embeds"
+  USERS ||--o{ PATIENTS : "createdBy"
+  USERS |o--o| PATIENTS : "patientId"
+  PATIENTS ||--o{ PATIENT_SUMMARIES : "patientId"
+  PATIENTS |o--o| PATIENT_SUMMARIES : "currentSummaryId"
+  PATIENTS ||--o{ APPOINTMENTS : "patientId"
+  USERS ||--o{ APPOINTMENTS : "doctorId"
+  APPOINTMENTS |o--o{ APPOINTMENT_REQUESTS : "appointmentId"
+  PATIENTS ||--o{ MEDICAL_REPORTS : "patientId"
+  USERS ||--o{ MEDICAL_REPORTS : "doctorId"
+  PATIENTS ||--o{ MEDICAL_DOCUMENTS : "patientId"
+  MEDICAL_DOCUMENTS ||--o{ EXTRACTED_FIELD : "embeds"
+  DOCUMENT_CATEGORIES |o--o{ MEDICAL_DOCUMENTS : "categoryCode"
+  PATIENTS |o--o{ FOLLOWUP_TASKS : "patientId"
+  USERS |o--o{ FOLLOWUP_TASKS : "assignedTo"
+  APPOINTMENTS ||--o{ REMINDERS : "appointmentId"
+  USERS |o--o{ FAQ_ENTRIES : "createdBy"
+  USERS |o--o{ LLM_INTERACTIONS : "userId"
+
+  USERS {
+    ObjectId _id PK
+    string email UK
+    string passwordHash
+    string firstName
+    string lastName
+    enum role
+    bool isActive
+    int failedLoginAttempts
+    date lockedUntil
+    date lastLoginAt
+    ObjectId patientId FK
+    object doctorProfile
+  }
+  DOCTOR_PROFILE {
+    string specialty
+    string phone
+    string officeRoom
+    array availabilities
+  }
+  AVAILABILITY {
+    int dayOfWeek
+    string startTime
+    string endTime
+    int slotMinutes
+  }
+  REFRESH_TOKENS {
+    ObjectId _id PK
+    ObjectId userId FK
+    string tokenHash UK
+    date expiresAt "TTL"
+    date revokedAt
+  }
+  PATIENTS {
+    ObjectId _id PK
+    string recordNumber UK
+    string firstName
+    string lastName
+    date dateOfBirth
+    enum gender
+    string nationalId UK
+    string phone
+    object address
+    object insurance
+    object emergencyContact
+    string administrativeNotes
+    ObjectId currentSummaryId FK
+    date deletedAt
+  }
+  PATIENT_SUMMARIES {
+    ObjectId _id PK
+    ObjectId patientId FK
+    string content
+    enum status
+    string llmModel
+    object sourceSnapshot
+    ObjectId reviewedBy FK
+    date reviewedAt
+  }
+  APPOINTMENTS {
+    ObjectId _id PK
+    ObjectId patientId FK
+    ObjectId doctorId FK
+    date startAt
+    date endAt
+    string reason
+    enum status
+  }
+  APPOINTMENT_REQUESTS {
+    ObjectId _id PK
+    string rawMessage
+    object parsed
+    ObjectId patientId FK
+    ObjectId appointmentId FK
+  }
+  MEDICAL_REPORTS {
+    ObjectId _id PK
+    ObjectId patientId FK
+    ObjectId doctorId FK
+    ObjectId appointmentId FK
+    string title
+    string rawNotes
+    string structuredContent
+    enum status
+  }
+  DOCUMENT_CATEGORIES {
+    ObjectId _id PK
+    string code UK
+    string label
+  }
+  MEDICAL_DOCUMENTS {
+    ObjectId _id PK
+    ObjectId patientId FK
+    string categoryCode
+    string aiSuggestedCategoryCode
+    string title
+    string rawText
+    array extractedFields
+  }
+  EXTRACTED_FIELD {
+    string name
+    string value
+    enum status
+    ObjectId validatedBy
+  }
+  FOLLOWUP_TASKS {
+    ObjectId _id PK
+    ObjectId patientId FK
+    ObjectId assignedTo FK
+    string description
+    date dueDate
+    enum status
+  }
+  REMINDERS {
+    ObjectId _id PK
+    ObjectId appointmentId FK
+    object appointmentSnapshot
+    string content
+    enum status
+  }
+  FAQ_ENTRIES {
+    ObjectId _id PK
+    string question
+    string answer
+    bool isApproved
+  }
+  LLM_INTERACTIONS {
+    ObjectId _id PK
+    enum module
+    ObjectId userId FK
+    ObjectId entityId
+    string prompt
+    string response
+    int latencyMs
+  }
+</pre>
+  </div>
+  <p class="key">Boxes labelled "embeds" (<code>DOCTOR_PROFILE</code>, <code>AVAILABILITY</code>, <code>EXTRACTED_FIELD</code>) are sub-documents stored inside their parent, not separate collections. Every other link is an ObjectId reference.</p>
+
+  <section class="notes">
+    <h2>Modelling choices</h2>
+    <ul>
+      <li>Roles: <code>ADMIN</code>, <code>SECRETARY</code>, <code>DOCTOR</code>, <code>ADMIN_STAFF</code>, <code>PATIENT</code>. A doctor is a user with an embedded <code>doctorProfile</code> and weekly availabilities. A <code>PATIENT</code> account points to its record with <code>patientId</code>.</li>
+      <li>Passwords are BCrypt hashes, refresh tokens are SHA-256 hashes. A TTL index deletes expired tokens on its own.</li>
+      <li>Patients are soft-deleted (<code>deletedAt</code>) so appointments and reports keep their history.</li>
+      <li>Summaries live in their own collection so every AI draft is kept. A partial unique index allows only one <code>VALIDATED</code> summary per patient, and <code>patients.currentSummaryId</code> points to it.</li>
+      <li>Extracted fields are embedded in their document because they are always read and validated together.</li>
+      <li>Record numbers (<code>PAT-2026-00001</code>) come from an atomic counter in <code>counters</code>.</li>
+    </ul>
+  </section>
+</div>

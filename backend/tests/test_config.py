@@ -5,73 +5,43 @@ from pathlib import Path
 
 import pytest
 
-
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[1]
+
+
+def import_settings(env: str, secret: str, check: str = "") -> subprocess.CompletedProcess:
+    environment = os.environ.copy()
+    environment["ENV"] = env
+    environment["JWT_SECRET"] = secret
+    return subprocess.run(
+        [sys.executable, "-c", f"from app.core.config import settings; {check}"],
+        cwd=BACKEND_DIRECTORY,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 @pytest.mark.parametrize(
     "secret",
-    [
-        "",
-        "CHANGE-ME-use-a-local-secret-of-at-least-32-characters",
-        "too-short",
-    ],
+    ["", "CHANGE-ME-use-a-local-secret-of-at-least-32-characters", "too-short"],
 )
 def test_production_refuses_missing_or_weak_jwt_secret(secret):
-    environment = os.environ.copy()
-    environment["APP_ENV"] = "production"
-    environment["JWT_SECRET"] = secret
-
-    result = subprocess.run(
-        [sys.executable, "-c", "from app.config import settings"],
-        cwd=BACKEND_DIRECTORY,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = import_settings("prod", secret)
 
     assert result.returncode != 0
-    assert "APP_ENV=production exige un JWT_SECRET" in result.stderr
+    assert "ENV=prod exige un JWT_SECRET" in result.stderr
 
 
 def test_development_allows_placeholder_jwt_secret():
-    environment = os.environ.copy()
-    environment["APP_ENV"] = "development"
-    environment["JWT_SECRET"] = "CHANGE-ME"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from app.config import settings; assert settings.app_env == 'development'",
-        ],
-        cwd=BACKEND_DIRECTORY,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = import_settings("dev", "CHANGE-ME", "assert settings.env == 'dev'")
 
     assert result.returncode == 0, result.stderr
 
 
 def test_production_accepts_a_configured_secret():
-    environment = os.environ.copy()
-    environment["APP_ENV"] = "production"
-    environment["JWT_SECRET"] = "a-valid-local-secret-with-at-least-32-chars"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from app.config import settings; assert settings.app_env == 'production'",
-        ],
-        cwd=BACKEND_DIRECTORY,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    result = import_settings(
+        "prod", "a-valid-local-secret-with-at-least-32-chars", "assert settings.env == 'prod'"
     )
 
     assert result.returncode == 0, result.stderr

@@ -1,10 +1,12 @@
 <app-auth-layout title="Se connecter" subtitle="Accédez à votre espace patient">
   <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+
     <div class="field">
-      <label for="identifier">Email ou numéro de téléphone</label>
-      <input id="identifier" class="input" formControlName="identifier" autocomplete="username"
+      <label for="identifier">Email</label>
+      <input id="identifier" type="email" class="input" formControlName="identifier" autocomplete="username"
              placeholder="exemple@domain.com" [class.invalid]="invalid('identifier')" />
-      @if (invalid('identifier')) { <span class="error">Saisissez votre email ou numéro de téléphone.</span> }
+      @if (invalid('identifier')) { <span class="error">Saisissez une adresse email valide.</span> }
     </div>
 
     <div class="field">
@@ -26,7 +28,9 @@
       <a href="#" class="small">Mot de passe oublié ?</a>
     </div>
 
-    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">Se connecter</button>
+    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Connexion…' : 'Se connecter' }}
+    </button>
 
     <div class="or"><span>ou</span></div>
 

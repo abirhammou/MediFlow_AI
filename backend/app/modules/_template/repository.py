@@ -1,13 +1,13 @@
 from typing import Any
 
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.modules._template.schemas import NoteCreate, NoteUpdate
 
 
 class NoteRepository:
-    def __init__(self, database: AsyncIOMotorDatabase) -> None:
+    def __init__(self, database: AsyncDatabase) -> None:
         self.collection = database["notes"]
 
     async def create(self, note: NoteCreate) -> dict[str, Any]:

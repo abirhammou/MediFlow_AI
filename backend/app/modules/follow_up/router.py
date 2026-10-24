@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
-from app.database import get_db
+from app.core.db import get_db
 from app.modules.follow_up.repository import TaskRepository
 from app.modules.follow_up.schemas import (
     ReminderDraft,
@@ -17,7 +17,7 @@ PREFIX = "/api/follow-up"
 TAGS = ["follow_up"]
 
 
-def get_task_service(database: AsyncIOMotorDatabase = Depends(get_db)) -> TaskService:
+def get_task_service(database: AsyncDatabase = Depends(get_db)) -> TaskService:
     return TaskService(TaskRepository(database))
 
 

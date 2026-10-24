@@ -1,14 +1,25 @@
-from datetime import UTC, datetime
+import time
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from bson import ObjectId
+from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 
-from app.database import get_db
+from app.core.db import DOCUMENT_MODELS, create_client, get_db, init_db
 from app.main import app
+from app.modules.auth.models import Role, User
 from app.security import create_access_token, hash_password
+
+DATABASE_SCRIPTS = Path(__file__).resolve().parents[2] / "database"
+MONGO_IMAGE = "mongo:7"
+APP_USER = "mediflow_app"
+APP_PASSWORD = "test-app-password"
+DB_NAME = "mediflow"
 
 
 @pytest.fixture
@@ -30,41 +41,132 @@ async def client(mock_database):
         yield test_client
 
 
+# ---------------------------------------------------------------------
+# Real MongoDB (Testcontainers): same image and init scripts as docker-compose.yml
+# ---------------------------------------------------------------------
+
+
+def _mongosh(container, *args: str) -> tuple[int, str]:
+    command = [
+        "mongosh",
+        "--quiet",
+        "-u",
+        container.username,
+        "-p",
+        container.password,
+        "--authenticationDatabase",
+        "admin",
+        DB_NAME,
+        *args,
+    ]
+    exit_code, output = container.exec(command)
+    return exit_code, output.decode(errors="replace")
+
+
+@pytest.fixture(scope="session")
+def mongo_container() -> Iterator:
+    try:
+        import docker
+
+        docker.from_env().ping()
+    except Exception as exc:
+        pytest.skip(f"Docker is not reachable, MongoDB tests skipped: {exc}")
+
+    from testcontainers.community.mongodb import MongoDbContainer
+
+    container = MongoDbContainer(MONGO_IMAGE).with_env("MONGO_APP_PASSWORD", APP_PASSWORD)
+    with container:
+        # The entrypoint restarts mongod after creating the root user: wait for the final one.
+        deadline = time.monotonic() + 60
+        while _mongosh(container, "--eval", "db.adminCommand('ping')")[0] != 0:
+            if time.monotonic() > deadline:
+                raise RuntimeError("MongoDB test container did not become ready")
+            time.sleep(0.5)
+        for script in ("00-create-user.js", "mongo-init.js"):
+            source = (DATABASE_SCRIPTS / script).read_text(encoding="utf-8")
+            exit_code, output = _mongosh(container, "--eval", source)
+            if exit_code != 0:
+                raise RuntimeError(f"{script} failed:\n{output}")
+        yield container
+
+
+@pytest.fixture(scope="session")
+def app_mongodb_uri(mongo_container) -> str:
+    """Connection string of the application user (not root), like backend/.env."""
+    host = mongo_container.get_container_host_ip()
+    port = mongo_container.get_exposed_port(27017)
+    return f"mongodb://{APP_USER}:{APP_PASSWORD}@{host}:{port}/{DB_NAME}?authSource={DB_NAME}"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def mongo_client(app_mongodb_uri: str) -> AsyncIterator[AsyncMongoClient]:
+    client = create_client(app_mongodb_uri)
+    yield client
+    await client.close()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def reference_ids(mongo_client: AsyncMongoClient) -> dict[str, list]:
+    """_id of the reference documents seeded by mongo-init.js (kept between tests)."""
+    database = mongo_client[DB_NAME]
+    return {
+        name: await database[name].distinct("_id") for name in ("counters", "document_categories")
+    }
+
+
+@pytest_asyncio.fixture
+async def db(
+    mongo_client: AsyncMongoClient, reference_ids: dict[str, list]
+) -> AsyncIterator[AsyncDatabase]:
+    database = mongo_client[DB_NAME]
+    await init_db(database)
+    yield database
+    for model in DOCUMENT_MODELS:
+        name = model.Settings.name
+        await database[name].delete_many({"_id": {"$nin": reference_ids.get(name, [])}})
+# ---------------------------------------------------------------------
+# Auth helpers (real MongoDB: the users validator is enforced)
+# ---------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def api_client(db: AsyncDatabase) -> AsyncIterator[AsyncClient]:
+    """HTTP client whose routes use the Testcontainers database."""
+    app.dependency_overrides[get_db] = lambda: db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
 @pytest.fixture
 def token_factory():
-    def create_token(user_id: str, role: str = "patient") -> str:
-        return create_access_token(user_id, role)
+    def create_token(user: User) -> str:
+        return create_access_token(str(user.id), user.role.value)
 
     return create_token
 
 
-@pytest_asyncio.fixture
-async def user_factory(mock_database):
+@pytest.fixture
+def user_factory(db: AsyncDatabase):
     async def create_user(
         *,
         email: str = "user@example.test",
-        full_name: str = "Test User",
+        first_name: str = "Test",
+        last_name: str = "User",
         password: str = "password-123",
-        role: str = "patient",
-        status: str = "active",
-        patient_id: ObjectId | None = None,
-    ) -> dict:
-        await mock_database["users"].create_index(
-            "email",
-            unique=True,
-            name="email_unique",
+        role: Role = Role.PATIENT,
+        is_active: bool = True,
+        patient_id: PydanticObjectId | None = None,
+    ) -> User:
+        user = User(
+            email=email,
+            password_hash=hash_password(password),
+            first_name=first_name,
+            last_name=last_name,
+            role=role,
+            is_active=is_active,
+            patient_id=patient_id,
         )
-        user = {
-            "_id": ObjectId(),
-            "email": email.lower(),
-            "full_name": full_name,
-            "password_hash": hash_password(password),
-            "role": role,
-            "status": status,
-            "patient_id": patient_id,
-            "created_at": datetime.now(UTC),
-        }
-        await mock_database["users"].insert_one(user)
-        return user
+        return await user.insert()
 
     return create_user
