@@ -36,6 +36,7 @@ from app.modules.patients.models import (
     Patient,
 )
 from app.security import hash_password
+from scripts.seed_dev_patients import seed_dev_patients
 
 DEFAULT_PASSWORD = "MediFlow2026!"
 # Tunisia: UTC+1 all year. Appointment times below are local clinic times.
@@ -243,6 +244,9 @@ async def seed(password: str = DEFAULT_PASSWORD) -> SeedReport:
 
     patients = {spec["national_id"]: await _ensure_patient(spec, admin.id, report) for spec in PATIENTS}
     await _ensure_user(PATIENT_ACCOUNT, password_hash, report, patient_id=patients["DEMO-0001"].id)
+    created, existing = await seed_dev_patients(admin.id)
+    report.created["patients"] += created
+    report.existing["patients"] += existing
 
     today = utcnow().astimezone(CLINIC_TZ).date()
     for national_id, doctor_email, days, local_time, status, reason in APPOINTMENTS:
