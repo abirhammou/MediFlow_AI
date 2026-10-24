@@ -38,6 +38,19 @@ export interface ReportQuery {
   size: number;
 }
 
+export interface ReportCreate {
+  patient_id: string;
+  appointment_id?: string | null;
+  title: string;
+  raw_notes: string;
+}
+
+export interface ReportUpdate {
+  title?: string;
+  raw_notes?: string;
+  structured_content?: string;
+}
+
 export interface ReportStats {
   draft: number;
   final: number;
@@ -61,6 +74,23 @@ export class ReportsApi {
 
   get(id: string): Observable<ReportOut> {
     return this.http.get<ReportOut>(`${this.base}/${id}`);
+  }
+
+  // ── Actions du médecin ──
+  create(body: ReportCreate): Observable<ReportOut> {
+    return this.http.post<ReportOut>(this.base, body);
+  }
+
+  update(id: string, body: ReportUpdate): Observable<ReportOut> {
+    return this.http.patch<ReportOut>(`${this.base}/${id}`, body);
+  }
+
+  generate(id: string): Observable<ReportOut> {
+    return this.http.post<ReportOut>(`${this.base}/${id}/generate`, {});
+  }
+
+  finalize(id: string, confirmWarnings = false): Observable<ReportOut> {
+    return this.http.post<ReportOut>(`${this.base}/${id}/finalize`, { confirm_warnings: confirmWarnings });
   }
 
   archive(id: string): Observable<ReportOut> {
