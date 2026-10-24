@@ -6,24 +6,26 @@ from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 ProviderName = Literal["mock", "openai_compatible", "anthropic"]
-MODULES_DIRECTORY = Path(__file__).resolve().parent / "modules"
+Environment = Literal["dev", "test", "prod"]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+MODULES_DIRECTORY = BACKEND_ROOT / "app" / "modules"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[1] / ".env",
+        env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
+    env: Environment = "dev"
     llm_mock: bool = True
     llm_timeout_seconds: float = Field(default=20, gt=0)
-    mongo_uri: str = "mongodb://localhost:27017"
-    mongo_db: str = "mediflow"
+    # Must authenticate as mediflow_app (readWrite on mediflow), never as root.
+    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_db: str = "mediflow"
     cors_origins: str = "http://localhost:4200"
-    environment: str = "development"
     expose_template: bool | None = None
 
     @property
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
     def should_expose_template(self) -> bool:
         if self.expose_template is not None:
             return self.expose_template
-        return self.environment == "development"
+        return self.env == "dev"
 
     def module_llm(self, module: str) -> tuple[ProviderName, str, str, str]:
         prefix = module.upper()

@@ -1,4 +1,4 @@
-from app.config import Settings, settings
+from app.core.config import Settings, settings
 from app.errors import LLMConfigurationError
 from app.llm.providers.anthropic import AnthropicProvider
 from app.llm.providers.base import BaseProvider
@@ -10,7 +10,7 @@ def active_provider_name(module: str, config: Settings = settings) -> str:
     provider, _, _, api_key = config.module_llm(module)
     if config.llm_mock or provider == "mock":
         return "mock"
-    if not api_key and config.environment == "development":
+    if not api_key and config.env == "dev":
         return "mock"
     return provider
 

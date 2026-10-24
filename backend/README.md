@@ -1,11 +1,11 @@
 # Backend MediFlow AI
 
-MediFlow AI est une maquette d'API FastAPI asynchrone avec MongoDB via Motor. Le mode mock est activé par défaut : les tests et l'application ne contactent aucun fournisseur LLM. Aucune authentification n'est installée dans cette maquette.
+MediFlow AI est une maquette d'API FastAPI asynchrone avec MongoDB via Beanie (ODM asynchrone sur PyMongo). Le mode mock est activé par défaut : les tests et l'application ne contactent aucun fournisseur LLM. Aucune authentification n'est installée dans cette maquette.
 
 ## Prérequis
 
-- Python 3.11 ou plus récent
-- MongoDB 7 (local ou lancé avec Docker Compose depuis la racine du dépôt)
+- Python 3.12 ou plus récent
+- MongoDB 7 lancé avec Docker Compose depuis la racine du dépôt (voir la section « Base de données » du [README racine](../README.md#base-de-données))
 
 ## Installation et démarrage
 
@@ -20,7 +20,17 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
-L'API répond sur `http://localhost:8000`, la documentation interactive sur `/docs` et le contrôle de santé sur `/health`. Les routes fonctionnelles de démonstration du module notes sont sous `/api/notes`.
+L'API répond sur `http://localhost:8000`, la documentation interactive sur `/docs` et le contrôle de santé (ping MongoDB) sur `/api/health`. Les routes fonctionnelles de démonstration du module notes sont sous `/api/notes`.
+
+## Modèles de données
+
+- `database/mongo-init.js` est la source de vérité : collections, champs, enums, validateurs (`additionalProperties: false`) et index. Un champ de modèle absent du validateur fait échouer l'insertion. Les index ne sont jamais déclarés dans Beanie.
+- Un fichier `app/modules/<module>/models.py` par module (MedDoc AI : `documents/`), enregistré dans `DOCUMENT_MODELS` (`app/core/db.py`).
+- Attributs Python en snake_case, champs MongoDB en camelCase via un générateur d'alias (`first_name` ↔ `firstName`).
+- Bases communes dans `app/core/models.py` : `TimestampedDocument` (`createdAt` + `updatedAt`) et `CreatedAtDocument` (`createdAt` seul), remplis par des hooks Beanie sur `insert()`, `replace()` et `save()`. `insert_many()`, `set()` et `update()` ne déclenchent pas les hooks.
+- Dates en UTC avec fuseau. `dateOfBirth` est stocké à minuit UTC (`Patient.birth_date` renvoie une `date`). Les e-mails sont mis en minuscules avant l'enregistrement.
+- Numéros de dossier : `app/core/sequence.py` (`next_record_number()` → `PAT-2026-00001`).
+- Requêtes partagées : `repository.py` de chaque module (`auth`, `patients`, `appointments`, `faq`).
 
 ## Configuration LLM
 
@@ -49,7 +59,7 @@ Dans `backend/` :
 python -m pytest
 ```
 
-Le test MongoDB utilise `mongomock-motor`; aucun serveur MongoDB n'est nécessaire pour les tests.
+Les tests de base de données démarrent un conteneur `mongo:7` avec Testcontainers (Docker requis, sinon ils sont ignorés). Le test du module modèle `_template` utilise `mongomock-motor`.
 
 ## Workflow Git
 

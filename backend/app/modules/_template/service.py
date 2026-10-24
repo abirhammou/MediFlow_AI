@@ -1,5 +1,5 @@
-from bson.errors import InvalidId
 from bson import ObjectId
+from bson.errors import InvalidId
 
 from app.errors import APIError
 from app.llm.service import generate_json

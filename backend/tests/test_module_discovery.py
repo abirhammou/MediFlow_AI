@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI
 
-from app.config import Settings
+from app.core.config import Settings
 from app.llm.registry import status
 from app.modules import discovery
 
@@ -66,6 +66,6 @@ def test_registry_reads_arbitrary_module_environment(monkeypatch):
 
     configured = status(
         ["new_team"],
-        Settings(llm_mock=False, environment="production"),
+        Settings(llm_mock=False, env="prod"),
     )["new_team"]
     assert configured == {"provider": "openai_compatible", "key_configured": True}

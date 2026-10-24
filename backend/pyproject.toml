@@ -1,0 +1,28 @@
+[project]
+name = "mediflow-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+# Dependencies are pinned in requirements.txt.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-rs"
+asyncio_mode = "auto"
+# One event loop for the whole run: the MongoDB client and Beanie are session-wide.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "UP042", # enums stay `str, Enum` (team convention)
+    "B008",  # FastAPI `Depends(...)` in argument defaults
+    "E501",  # line length is handled by `ruff format`
+    "UP046", # TypeVar-based generics are fine
+    "UP047",
+]

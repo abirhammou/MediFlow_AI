@@ -1,9 +1,8 @@
 import pytest
 from pydantic import BaseModel, Field
 
-from app.config import Settings
-from app.errors import LLMResponseError
-from app.errors import LLMConfigurationError
+from app.core.config import Settings
+from app.errors import LLMConfigurationError, LLMResponseError
 from app.llm.registry import provider_for
 from app.llm.service import generate_json
 
@@ -78,7 +77,7 @@ def test_missing_key_in_production_is_a_typed_503(monkeypatch):
     monkeypatch.setenv("TEMPLATE_LLM_BASE_URL", "https://example.test")
     monkeypatch.setenv("TEMPLATE_LLM_MODEL", "example-model")
     monkeypatch.setenv("TEMPLATE_LLM_API_KEY", "")
-    config = Settings(llm_mock=False, environment="production")
+    config = Settings(llm_mock=False, env="prod")
 
     with pytest.raises(LLMConfigurationError):
         provider_for("template", config)
