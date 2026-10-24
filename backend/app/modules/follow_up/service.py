@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from bson import ObjectId
 from bson.errors import InvalidId
 
@@ -10,6 +14,7 @@ from app.modules.follow_up.schemas import (
     ReminderRequest,
     TaskCreate,
     TaskOut,
+    TaskStats,
     TaskStatus,
     TaskUpdate,
 )
@@ -36,8 +41,16 @@ class TaskService:
     async def create(self, task: TaskCreate) -> TaskOut:
         return _serialize(await self.repository.create(task))
 
-    async def list(self) -> list[TaskOut]:
-        return [_serialize(doc) for doc in await self.repository.list()]
+    async def list(self, status: Optional[TaskStatus] = None) -> list[TaskOut]:
+        if status is not None:
+            docs = await self.repository.list_by_status(status.value)
+        else:
+            docs = await self.repository.list()
+        return [_serialize(doc) for doc in docs]
+
+    async def stats(self) -> TaskStats:
+        data = await self.repository.stats()
+        return TaskStats(**data)
 
     async def get(self, task_id: str) -> TaskOut:
         document = await self._get_document(task_id)
