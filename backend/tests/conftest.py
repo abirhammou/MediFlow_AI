@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
 from pymongo import AsyncMongoClient
@@ -11,6 +12,8 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.db import DOCUMENT_MODELS, create_client, get_db, init_db
 from app.main import app
+from app.modules.auth.models import Role, User
+from app.security import create_access_token, hash_password
 
 DATABASE_SCRIPTS = Path(__file__).resolve().parents[2] / "database"
 MONGO_IMAGE = "mongo:7"
@@ -30,7 +33,7 @@ def mock_database():
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client(mock_database):
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -121,3 +124,49 @@ async def db(
     for model in DOCUMENT_MODELS:
         name = model.Settings.name
         await database[name].delete_many({"_id": {"$nin": reference_ids.get(name, [])}})
+# ---------------------------------------------------------------------
+# Auth helpers (real MongoDB: the users validator is enforced)
+# ---------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def api_client(db: AsyncDatabase) -> AsyncIterator[AsyncClient]:
+    """HTTP client whose routes use the Testcontainers database."""
+    app.dependency_overrides[get_db] = lambda: db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def token_factory():
+    def create_token(user: User) -> str:
+        return create_access_token(str(user.id), user.role.value)
+
+    return create_token
+
+
+@pytest.fixture
+def user_factory(db: AsyncDatabase):
+    async def create_user(
+        *,
+        email: str = "user@example.test",
+        first_name: str = "Test",
+        last_name: str = "User",
+        password: str = "password-123",
+        role: Role = Role.PATIENT,
+        is_active: bool = True,
+        patient_id: PydanticObjectId | None = None,
+    ) -> User:
+        user = User(
+            email=email,
+            password_hash=hash_password(password),
+            first_name=first_name,
+            last_name=last_name,
+            role=role,
+            is_active=is_active,
+            patient_id=patient_id,
+        )
+        return await user.insert()
+
+    return create_user

@@ -1,0 +1,39 @@
+<app-auth-layout title="Se connecter" subtitle="Accédez à votre espace patient">
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+
+    <div class="field">
+      <label for="identifier">Email</label>
+      <input id="identifier" type="email" class="input" formControlName="identifier" autocomplete="username"
+             placeholder="exemple@domain.com" [class.invalid]="invalid('identifier')" />
+      @if (invalid('identifier')) { <span class="error">Saisissez une adresse email valide.</span> }
+    </div>
+
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <div class="input-wrap">
+        <input id="password" class="input" formControlName="password" autocomplete="current-password"
+               [type]="showPassword() ? 'text' : 'password'" placeholder="Votre mot de passe"
+               [class.invalid]="invalid('password')" />
+        <button type="button" class="input-toggle" (click)="showPassword.set(!showPassword())"
+                [attr.aria-label]="showPassword() ? 'Masquer le mot de passe' : 'Afficher le mot de passe'">
+          <app-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="18" />
+        </button>
+      </div>
+      @if (invalid('password')) { <span class="error">Le mot de passe doit contenir au moins 6 caractères.</span> }
+    </div>
+
+    <div class="row">
+      <label class="check"><input type="checkbox" formControlName="remember" /> Se souvenir de moi</label>
+      <a href="#" class="small">Mot de passe oublié ?</a>
+    </div>
+
+    <button class="btn btn-primary btn-block" type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Connexion…' : 'Se connecter' }}
+    </button>
+
+    <div class="or"><span>ou</span></div>
+
+    <a routerLink="/signup" class="btn btn-outline btn-block">Créer un compte</a>
+  </form>
+</app-auth-layout>

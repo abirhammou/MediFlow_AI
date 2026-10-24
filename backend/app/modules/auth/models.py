@@ -14,6 +14,7 @@ class Role(str, Enum):
     SECRETARY = "SECRETARY"
     DOCTOR = "DOCTOR"
     ADMIN_STAFF = "ADMIN_STAFF"
+    PATIENT = "PATIENT"
 
 
 class Availability(CamelModel):
@@ -31,6 +32,8 @@ class DoctorProfile(CamelModel):
 
 
 class User(TimestampedDocument):
+    """`is_active = False` means awaiting approval or disabled: login is refused."""
+
     email: str = Field(pattern=EMAIL_PATTERN)
     password_hash: str = Field(min_length=50, description="BCrypt hash, never plain text")
     first_name: str = Field(max_length=80)
@@ -40,6 +43,7 @@ class User(TimestampedDocument):
     failed_login_attempts: int = Field(default=0, ge=0)
     locked_until: AwareDatetime | None = None
     last_login_at: AwareDatetime | None = None
+    patient_id: PydanticObjectId | None = Field(default=None, description="only for PATIENT")
     doctor_profile: DoctorProfile | None = Field(default=None, description="only for DOCTOR")
 
     @before_event(Insert, Replace, Save)

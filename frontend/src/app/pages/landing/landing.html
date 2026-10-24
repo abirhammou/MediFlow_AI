@@ -1,0 +1,62 @@
+<header class="topbar">
+  <div class="container bar">
+    <app-logo />
+    <nav aria-label="Navigation principale">
+      @for (item of nav; track item.href) { <a [href]="item.href">{{ item.label }}</a> }
+    </nav>
+    <a routerLink="/login" class="btn btn-primary btn-sm">Se connecter</a>
+  </div>
+</header>
+
+<main>
+  <section id="accueil" class="container hero">
+    <div class="hero-copy">
+      <h1>Une gestion médicale plus simple, plus rapide, avec l'IA</h1>
+      <p>
+        MediFlow AI vous accompagne dans votre parcours de santé avec une prise en charge
+        intelligente et personnalisée.
+      </p>
+      <div class="actions">
+        <a routerLink="/signup" class="btn btn-primary">Commencer</a>
+        <a href="#services" class="btn btn-outline">En savoir plus</a>
+      </div>
+    </div>
+    <div class="hero-visual" role="img" aria-label="Médecin utilisant une tablette">
+      <div class="badge">
+        <span class="badge-icon"><app-icon name="heart" [size]="22" /></span>
+        <span>Votre santé,<br />notre priorité</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="container highlights" aria-label="Points forts">
+    @for (h of highlights; track h.title) {
+      <div class="highlight">
+        <app-icon [name]="h.icon" [size]="26" />
+        <strong>{{ h.title }}</strong>
+        <span>{{ h.text }}</span>
+      </div>
+    }
+  </section>
+
+  <section id="services" class="container services">
+    <h2>Nos services</h2>
+    <p class="lead">Une plateforme complète pour vous accompagner.</p>
+    <div class="grid">
+      @for (s of services; track s.title) {
+        <article class="service">
+          <span class="service-icon"><app-icon [name]="s.icon" [size]="22" /></span>
+          <h3>{{ s.title }}</h3>
+          <p>{{ s.text }}</p>
+        </article>
+      }
+    </div>
+  </section>
+</main>
+
+<footer id="contact" class="footer">
+  <div class="container foot">
+    <app-logo />
+    <span>© {{ year }} MediFlow AI. Tous droits réservés.</span>
+  </div>
+</footer>

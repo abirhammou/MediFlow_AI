@@ -12,7 +12,7 @@ const mediflow = db.getSiblingDB(DB_NAME);
 // ---------------------------------------------------------------------
 // Shared enums (keep in sync with the Python enums)
 // ---------------------------------------------------------------------
-const ROLES              = ["ADMIN", "SECRETARY", "DOCTOR", "ADMIN_STAFF"];
+const ROLES              = ["ADMIN", "SECRETARY", "DOCTOR", "ADMIN_STAFF", "PATIENT"];
 const GENDERS            = ["MALE", "FEMALE", "OTHER"];
 const APPOINTMENT_STATUS = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 const AI_REVIEW_STATUS   = ["DRAFT", "VALIDATED", "REJECTED"];
@@ -60,7 +60,8 @@ function defineCollection(name, required, properties) {
 // AUTH
 // =====================================================================
 
-// users — doctors keep their profile + weekly availability embedded
+// users — doctors keep their profile + weekly availability embedded;
+// PATIENT accounts point to their record with patientId
 const users = defineCollection(
   "users",
   ["email", "passwordHash", "firstName", "lastName", "role", "isActive", "failedLoginAttempts", "createdAt", "updatedAt"],
@@ -74,6 +75,7 @@ const users = defineCollection(
     failedLoginAttempts: int({ minimum: 0 }),
     lockedUntil: optDate,
     lastLoginAt: optDate,
+    patientId: { ...optOid, description: "patients._id, only when role = PATIENT" },
     doctorProfile: {
       bsonType: ["object", "null"],
       description: "only when role = DOCTOR",

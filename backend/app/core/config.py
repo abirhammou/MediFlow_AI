@@ -10,6 +10,7 @@ ProviderName = Literal["mock", "openai_compatible", "anthropic"]
 Environment = Literal["dev", "test", "prod"]
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 MODULES_DIRECTORY = BACKEND_ROOT / "app" / "modules"
+INSECURE_JWT_SECRET = "CHANGE-ME-use-a-local-secret-of-at-least-32-characters"
 
 
 class Settings(BaseSettings):
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
         env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     env: Environment = "dev"
@@ -27,6 +29,23 @@ class Settings(BaseSettings):
     mongodb_db: str = "mediflow"
     cors_origins: str = "http://localhost:4200"
     expose_template: bool | None = None
+    jwt_secret: str = INSECURE_JWT_SECRET
+    jwt_expire_minutes: int = Field(default=60, gt=0)
+    # Password of the accounts created by scripts/seed.py (empty: dev default)
+    seed_password: str | None = None
+
+    def validate_runtime_configuration(self) -> None:
+        secret = self.jwt_secret.strip()
+        if self.env == "prod" and (
+            not secret
+            or len(secret) < 32
+            or secret == INSECURE_JWT_SECRET
+            or "CHANGE-ME" in secret.upper()
+        ):
+            raise ValueError(
+                "ENV=prod exige un JWT_SECRET défini, non factice et "
+                "d'au moins 32 caractères."
+            )
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -58,3 +77,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+settings.validate_runtime_configuration()

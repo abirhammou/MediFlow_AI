@@ -66,6 +66,7 @@ erDiagram
   USERS ||--o| DOCTOR_PROFILE : "embeds"
   DOCTOR_PROFILE ||--o{ AVAILABILITY : "embeds"
   USERS ||--o{ PATIENTS : "createdBy"
+  USERS |o--o| PATIENTS : "patientId"
   PATIENTS ||--o{ PATIENT_SUMMARIES : "patientId"
   PATIENTS |o--o| PATIENT_SUMMARIES : "currentSummaryId"
   PATIENTS ||--o{ APPOINTMENTS : "patientId"
@@ -93,6 +94,7 @@ erDiagram
     int failedLoginAttempts
     date lockedUntil
     date lastLoginAt
+    ObjectId patientId FK
     object doctorProfile
   }
   DOCTOR_PROFILE {
@@ -223,7 +225,7 @@ erDiagram
   <section class="notes">
     <h2>Modelling choices</h2>
     <ul>
-      <li>Roles: <code>ADMIN</code>, <code>SECRETARY</code>, <code>DOCTOR</code>, <code>ADMIN_STAFF</code>. A doctor is a user with an embedded <code>doctorProfile</code> and weekly availabilities.</li>
+      <li>Roles: <code>ADMIN</code>, <code>SECRETARY</code>, <code>DOCTOR</code>, <code>ADMIN_STAFF</code>, <code>PATIENT</code>. A doctor is a user with an embedded <code>doctorProfile</code> and weekly availabilities. A <code>PATIENT</code> account points to its record with <code>patientId</code>.</li>
       <li>Passwords are BCrypt hashes, refresh tokens are SHA-256 hashes. A TTL index deletes expired tokens on its own.</li>
       <li>Patients are soft-deleted (<code>deletedAt</code>) so appointments and reports keep their history.</li>
       <li>Summaries live in their own collection so every AI draft is kept. A partial unique index allows only one <code>VALIDATED</code> summary per patient, and <code>patients.currentSummaryId</code> points to it.</li>
