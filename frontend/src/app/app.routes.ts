@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/auth/auth.guard';
+import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
+import { PATIENT_ROLES } from './features/patients/patient-permissions';
 
 export const routes: Routes = [
   // ── Public pages ──────────────────────────────────────────────────
@@ -39,9 +40,9 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/appointment-manager/appointment-manager').then(m => m.AppointmentManager),
       },
       {
-        path: 'patient-records',
-        title: 'Patient Records AI · MediFlow AI',
-        loadComponent: () => import('./pages/patient-records/patient-records').then(m => m.PatientRecords),
+        path: 'patients',
+        canActivate: [roleGuard(PATIENT_ROLES.read)],
+        loadChildren: () => import('./features/patients/patients.routes').then(m => m.PATIENT_ROUTES),
       },
       {
         path: 'report-writer',

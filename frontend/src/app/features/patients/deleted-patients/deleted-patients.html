@@ -1,0 +1,68 @@
+<div class="page-head">
+  <div>
+    <h1>Patients supprimés</h1>
+    <p>Les dossiers supprimés sont masqués, jamais effacés. Restaurez-les ici.</p>
+  </div>
+</div>
+
+<section class="card">
+  @if (error()) {
+    <div class="state" role="alert">
+      <strong>Impossible de charger les dossiers supprimés</strong>
+      {{ error() }}
+    </div>
+  } @else if (result(); as page) {
+    @if (page.items.length === 0) {
+      <div class="state">
+        <strong>Aucun dossier supprimé</strong>
+        La corbeille est vide.
+      </div>
+    } @else {
+      <div class="table-wrap" [attr.aria-busy]="loading()">
+        <table>
+          <thead>
+            <tr>
+              <th>N° dossier</th>
+              <th>Nom</th>
+              <th>Prénom</th>
+              <th>Âge</th>
+              <th>Sexe</th>
+              <th>Supprimé le</th>
+              <th><span class="muted">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (patient of page.items; track patient.id) {
+              <tr>
+                <td><span class="record">{{ patient.recordNumber }}</span></td>
+                <td><strong>{{ patient.lastName }}</strong></td>
+                <td>{{ patient.firstName }}</td>
+                <td>{{ ageLabel(patient.age) }}</td>
+                <td>{{ genderLabels[patient.gender] }}</td>
+                <td>{{ formatDateTime(patient.deletedAt) }}</td>
+                <td>
+                  <button type="button" class="btn btn-outline btn-xs" [disabled]="restoring() !== null"
+                          (click)="restore(patient)">
+                    <app-icon name="rotate-ccw" [size]="14" />
+                    {{ restoring() === patient.id ? 'Restauration…' : 'Restaurer' }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span>Page {{ page.page }} sur {{ pageCount() }} · {{ page.total }} dossier{{ page.total > 1 ? 's' : '' }}</span>
+        <div class="actions">
+          <button type="button" class="btn btn-outline btn-xs" [disabled]="page.page <= 1 || loading()"
+                  (click)="load(page.page - 1)">Précédent</button>
+          <button type="button" class="btn btn-outline btn-xs" [disabled]="page.page >= pageCount() || loading()"
+                  (click)="load(page.page + 1)">Suivant</button>
+        </div>
+      </div>
+    }
+  } @else {
+    <div class="state" aria-busy="true">Chargement…</div>
+  }
+</section>

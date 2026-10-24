@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService, ROLE_LABELS, Role } from '../../core/auth/auth.service';
+import { PATIENT_ROLES } from '../../features/patients/patient-permissions';
 import { Icon } from '../icon/icon';
 
 interface NavItem {
@@ -8,12 +9,14 @@ interface NavItem {
   route: string;
   icon: string;
   dot?: string;
+  /** Only shown to these roles; visible to everyone when omitted. */
+  roles?: readonly Role[];
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Tableau de bord',       route: '/dashboard',           icon: 'home'        },
   { label: 'Appointment Manager',   route: '/appointment-manager', icon: 'calendar',   dot: '#0284c7' },
-  { label: 'Patient Records',       route: '/patient-records',     icon: 'users',      dot: '#d97706' },
+  { label: 'Patients',              route: '/patients',            icon: 'users',      dot: '#d97706', roles: PATIENT_ROLES.read },
   { label: 'ReportWriter',          route: '/report-writer',       icon: 'file-text',  dot: '#7c3aed' },
   { label: 'MedDoc',                route: '/med-doc',             icon: 'file-plus',  dot: '#16a34a' },
   { label: 'FollowUp',              route: '/follow-up',           icon: 'bell',       dot: '#d97706' },
@@ -31,7 +34,10 @@ export class Shell {
   private router = inject(Router);
 
   sidebarOpen = signal(false);
-  navItems = NAV_ITEMS;
+  navItems = computed(() => {
+    const role = this.auth.user()?.role;
+    return NAV_ITEMS.filter(item => !item.roles || (role !== undefined && item.roles.includes(role)));
+  });
 
   get user() { return this.auth.user(); }
 

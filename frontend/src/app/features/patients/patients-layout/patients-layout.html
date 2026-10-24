@@ -1,0 +1,10 @@
+<div class="patients-area page">
+  <nav class="subnav" aria-label="Navigation patients">
+    <a routerLink="/patients" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Patients</a>
+    @if (perms.canRestore()) {
+      <a routerLink="/patients/deleted" routerLinkActive="active">Patients supprimés</a>
+    }
+  </nav>
+
+  <router-outlet />
+</div>

@@ -1,0 +1,108 @@
+<a class="back" routerLink="/patients"><app-icon name="arrow-left" [size]="16" /> Retour à la liste</a>
+
+@if (error()) {
+  <div class="alert" role="alert">{{ error() }}</div>
+} @else if (patient(); as p) {
+  <section class="card identity">
+    <span class="record-number">{{ p.recordNumber }}</span>
+    <div>
+      <h1>{{ p.lastName }} {{ p.firstName }}</h1>
+      <p>{{ genderLabels[p.gender] }} · {{ ageLabel(p.age) }} · né(e) le {{ formatBirthDate(p.dateOfBirth) }}</p>
+    </div>
+    @if (perms.canWrite()) {
+      <div class="actions">
+        <a class="btn btn-outline btn-sm" [routerLink]="['/patients', p.id, 'edit']">
+          <app-icon name="edit" [size]="16" /> Modifier
+        </a>
+        <button type="button" class="btn btn-danger btn-sm" [disabled]="deleting()" (click)="remove(p)">
+          <app-icon name="trash" [size]="16" /> Supprimer
+        </button>
+      </div>
+    }
+  </section>
+
+  <!-- Reserved for the AI summary of the record (later phase, not implemented). -->
+  <section class="ai-summary-slot" aria-hidden="true"></section>
+
+  <div class="cards">
+    <section class="card info">
+      <h2>Identité</h2>
+      <dl>
+        <dt>Nom</dt><dd>{{ p.lastName }}</dd>
+        <dt>Prénom</dt><dd>{{ p.firstName }}</dd>
+        <dt>Date de naissance</dt><dd>{{ formatBirthDate(p.dateOfBirth) }} ({{ ageLabel(p.age) }})</dd>
+        <dt>Sexe</dt><dd>{{ genderLabels[p.gender] }}</dd>
+        <dt>CIN</dt><dd>{{ p.nationalId || '—' }}</dd>
+        <dt>Groupe sanguin</dt><dd>{{ p.bloodType || '—' }}</dd>
+      </dl>
+    </section>
+
+    <section class="card info">
+      <h2>Contact</h2>
+      <dl>
+        <dt>Téléphone</dt>
+        <dd>@if (p.phone) { <a [href]="'tel:' + p.phone">{{ p.phone }}</a> } @else { — }</dd>
+        <dt>Email</dt>
+        <dd>@if (p.email) { <a [href]="'mailto:' + p.email">{{ p.email }}</a> } @else { — }</dd>
+      </dl>
+    </section>
+
+    <section class="card info">
+      <h2>Adresse</h2>
+      @if (p.address; as address) {
+        <dl>
+          <dt>Rue</dt><dd>{{ address.street || '—' }}</dd>
+          <dt>Ville</dt><dd>{{ address.city || '—' }}</dd>
+          <dt>Code postal</dt><dd>{{ address.postalCode || '—' }}</dd>
+        </dl>
+      } @else {
+        <p class="muted">Non renseignée.</p>
+      }
+    </section>
+
+    <section class="card info">
+      <h2>Assurance</h2>
+      @if (p.insurance; as insurance) {
+        <dl>
+          <dt>Organisme</dt><dd>{{ insurance.provider || '—' }}</dd>
+          <dt>N° d'affiliation</dt><dd>{{ insurance.number || '—' }}</dd>
+        </dl>
+      } @else {
+        <p class="muted">Aucune assurance renseignée.</p>
+      }
+    </section>
+
+    <section class="card info">
+      <h2>Personne à contacter</h2>
+      @if (p.emergencyContact; as contact) {
+        <dl>
+          <dt>Nom</dt><dd>{{ contact.name || '—' }}</dd>
+          <dt>Téléphone</dt>
+          <dd>@if (contact.phone) { <a [href]="'tel:' + contact.phone">{{ contact.phone }}</a> } @else { — }</dd>
+          <dt>Lien</dt><dd>{{ contact.relation || '—' }}</dd>
+        </dl>
+      } @else {
+        <p class="muted">Aucune personne renseignée.</p>
+      }
+    </section>
+
+    <section class="card info">
+      <h2>Suivi du dossier</h2>
+      <dl>
+        <dt>Créé le</dt><dd>{{ formatDateTime(p.createdAt) }}</dd>
+        <dt>Modifié le</dt><dd>{{ formatDateTime(p.updatedAt) }}</dd>
+      </dl>
+    </section>
+
+    <section class="card info wide">
+      <h2>Notes administratives</h2>
+      @if (p.administrativeNotes) {
+        <p class="notes">{{ p.administrativeNotes }}</p>
+      } @else {
+        <p class="muted">Aucune note.</p>
+      }
+    </section>
+  </div>
+} @else {
+  <div class="card state" aria-busy="true">Chargement du dossier…</div>
+}

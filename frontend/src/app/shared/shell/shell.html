@@ -13,7 +13,7 @@
   <nav class="nav" aria-label="Navigation principale">
     <span class="sidebar-section">Navigation</span>
 
-    @for (item of navItems; track item.route) {
+    @for (item of navItems(); track item.route) {
       <a class="nav-item"
          [routerLink]="item.route"
          routerLinkActive="active"

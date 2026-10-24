@@ -1,0 +1,236 @@
+@if (patient(); as current) {
+  <a class="back" [routerLink]="['/patients', current.id]"><app-icon name="arrow-left" [size]="16" /> Retour au dossier</a>
+} @else {
+  <a class="back" routerLink="/patients"><app-icon name="arrow-left" [size]="16" /> Retour à la liste</a>
+}
+
+<div class="page-head">
+  <div>
+    <h1>{{ title() }}</h1>
+    <p>
+      @if (patient(); as current) {
+        Dossier <span class="record">{{ current.recordNumber }}</span>
+      } @else {
+        Le numéro de dossier est attribué à l'enregistrement.
+      }
+    </p>
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="card state" aria-busy="true">Chargement du dossier…</div>
+} @else if (loadError()) {
+  <div class="alert" role="alert">{{ loadError() }}</div>
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (generalError()) {
+      <div class="alert" role="alert" tabindex="-1">{{ generalError() }}</div>
+    }
+
+    @if (duplicates().length) {
+      <div class="warning" role="status">
+        <app-icon name="alert" [size]="20" />
+        <div>
+          <strong>Doublon possible :</strong>
+          {{ duplicates().length > 1 ? 'des patients ont' : 'un patient a' }} déjà ces nom, prénom et date de naissance.
+          Vérifiez avant d'enregistrer.
+          <ul>
+            @for (duplicate of duplicates(); track duplicate.id) {
+              <li>
+                <!-- New tab keeps the form. rel="opener" lets Chrome copy the session (sessionStorage token). -->
+                <a [routerLink]="['/patients', duplicate.id]" target="_blank" rel="opener">
+                  {{ duplicate.recordNumber }} · {{ duplicate.lastName }} {{ duplicate.firstName }}
+                </a>
+                <span class="muted"> — né(e) le {{ formatBirthDate(duplicate.dateOfBirth) }}{{ duplicate.city ? ', ' + duplicate.city : '' }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    }
+
+    <section class="card form-section">
+      <h2>Identité</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="lastName" class="required">Nom</label>
+          <input id="lastName" class="input" formControlName="lastName" autocomplete="off"
+                 [class.invalid]="error('lastName')" [attr.aria-invalid]="error('lastName') ? 'true' : null"
+                 [attr.aria-describedby]="error('lastName') ? 'lastName-error' : null" />
+          @if (error('lastName'); as message) { <span class="error" id="lastName-error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="firstName" class="required">Prénom</label>
+          <input id="firstName" class="input" formControlName="firstName" autocomplete="off"
+                 [class.invalid]="error('firstName')" [attr.aria-invalid]="error('firstName') ? 'true' : null"
+                 [attr.aria-describedby]="error('firstName') ? 'firstName-error' : null" />
+          @if (error('firstName'); as message) { <span class="error" id="firstName-error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="dateOfBirth" class="required">Date de naissance</label>
+          <input id="dateOfBirth" type="date" class="input" formControlName="dateOfBirth" [max]="today"
+                 [class.invalid]="error('dateOfBirth')" [attr.aria-invalid]="error('dateOfBirth') ? 'true' : null"
+                 [attr.aria-describedby]="error('dateOfBirth') ? 'dateOfBirth-error' : 'dateOfBirth-hint'" />
+          @if (error('dateOfBirth'); as message) {
+            <span class="error" id="dateOfBirth-error">{{ message }}</span>
+          } @else if (age()) {
+            <span class="hint" id="dateOfBirth-hint">{{ age() }}</span>
+          }
+        </div>
+        <div class="field">
+          <label for="gender" class="required">Sexe</label>
+          <select id="gender" class="input" formControlName="gender"
+                  [class.invalid]="error('gender')" [attr.aria-invalid]="error('gender') ? 'true' : null"
+                  [attr.aria-describedby]="error('gender') ? 'gender-error' : null">
+            <option value="">Choisir…</option>
+            @for (gender of genders; track gender) {
+              <option [value]="gender">{{ genderLabels[gender] }}</option>
+            }
+          </select>
+          @if (error('gender'); as message) { <span class="error" id="gender-error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="nationalId">CIN</label>
+          <input id="nationalId" class="input" formControlName="nationalId" inputmode="numeric" maxlength="8"
+                 autocomplete="off" placeholder="8 chiffres"
+                 [class.invalid]="error('nationalId')" [attr.aria-invalid]="error('nationalId') ? 'true' : null"
+                 [attr.aria-describedby]="error('nationalId') ? 'nationalId-error' : null" />
+          @if (error('nationalId'); as message) { <span class="error" id="nationalId-error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="bloodType">Groupe sanguin</label>
+          <select id="bloodType" class="input" formControlName="bloodType">
+            <option value="">Non renseigné</option>
+            @for (bloodType of bloodTypes; track bloodType) {
+              <option [value]="bloodType">{{ bloodType }}</option>
+            }
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-section">
+      <h2>Contact</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="phone">Téléphone</label>
+          <input id="phone" type="tel" class="input" formControlName="phone" autocomplete="off"
+                 placeholder="+216 20 123 456"
+                 [class.invalid]="error('phone')" [attr.aria-invalid]="error('phone') ? 'true' : null"
+                 [attr.aria-describedby]="error('phone') ? 'phone-error' : null" />
+          @if (error('phone'); as message) { <span class="error" id="phone-error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" class="input" formControlName="email" autocomplete="off"
+                 placeholder="prenom.nom@example.test"
+                 [class.invalid]="error('email')" [attr.aria-invalid]="error('email') ? 'true' : null"
+                 [attr.aria-describedby]="error('email') ? 'email-error' : null" />
+          @if (error('email'); as message) { <span class="error" id="email-error">{{ message }}</span> }
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-section" formGroupName="address">
+      <h2>Adresse</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="address-street">Rue</label>
+          <input id="address-street" class="input" formControlName="street" autocomplete="off"
+                 [class.invalid]="error('address.street')" [attr.aria-invalid]="error('address.street') ? 'true' : null" />
+          @if (error('address.street'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="address-city">Ville</label>
+          <input id="address-city" class="input" formControlName="city" list="form-cities" autocomplete="off"
+                 [class.invalid]="error('address.city')" [attr.aria-invalid]="error('address.city') ? 'true' : null" />
+          <datalist id="form-cities">
+            @for (city of cities; track city) { <option [value]="city"></option> }
+          </datalist>
+          @if (error('address.city'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="address-postalCode">Code postal</label>
+          <input id="address-postalCode" class="input" formControlName="postalCode" autocomplete="off"
+                 [class.invalid]="error('address.postalCode')" [attr.aria-invalid]="error('address.postalCode') ? 'true' : null" />
+          @if (error('address.postalCode'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-section" formGroupName="insurance">
+      <h2>Assurance</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="insurance-provider">Organisme</label>
+          <input id="insurance-provider" class="input" formControlName="provider" list="insurance-providers"
+                 autocomplete="off" placeholder="CNAM, assurance privée…"
+                 [class.invalid]="error('insurance.provider')" [attr.aria-invalid]="error('insurance.provider') ? 'true' : null" />
+          <datalist id="insurance-providers">
+            <option value="CNAM"></option>
+            <option value="Assurance privée"></option>
+          </datalist>
+          @if (error('insurance.provider'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="insurance-number">N° d'affiliation</label>
+          <input id="insurance-number" class="input" formControlName="number" autocomplete="off"
+                 [class.invalid]="error('insurance.number')" [attr.aria-invalid]="error('insurance.number') ? 'true' : null" />
+          @if (error('insurance.number'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-section" formGroupName="emergencyContact">
+      <h2>Personne à contacter</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="contact-name">Nom complet</label>
+          <input id="contact-name" class="input" formControlName="name" autocomplete="off"
+                 [class.invalid]="error('emergencyContact.name')" [attr.aria-invalid]="error('emergencyContact.name') ? 'true' : null" />
+          @if (error('emergencyContact.name'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="contact-phone">Téléphone</label>
+          <input id="contact-phone" type="tel" class="input" formControlName="phone" autocomplete="off"
+                 [class.invalid]="error('emergencyContact.phone')" [attr.aria-invalid]="error('emergencyContact.phone') ? 'true' : null" />
+          @if (error('emergencyContact.phone'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+        <div class="field">
+          <label for="contact-relation">Lien</label>
+          <input id="contact-relation" class="input" formControlName="relation" autocomplete="off"
+                 placeholder="Époux, mère, fils…"
+                 [class.invalid]="error('emergencyContact.relation')" [attr.aria-invalid]="error('emergencyContact.relation') ? 'true' : null" />
+          @if (error('emergencyContact.relation'); as message) { <span class="error">{{ message }}</span> }
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-section">
+      <h2>Notes administratives</h2>
+      <div class="field">
+        <label for="administrativeNotes">Notes</label>
+        <textarea id="administrativeNotes" class="input" formControlName="administrativeNotes" rows="5"
+                  placeholder="Informations utiles à l'accueil (préférences, accompagnement…)"
+                  [class.invalid]="error('administrativeNotes')"
+                  [attr.aria-invalid]="error('administrativeNotes') ? 'true' : null"></textarea>
+        @if (error('administrativeNotes'); as message) {
+          <span class="error">{{ message }}</span>
+        } @else {
+          <span class="hint">{{ notesLength() }} / 5000</span>
+        }
+      </div>
+    </section>
+
+    <div class="form-actions">
+      @if (patient(); as current) {
+        <a class="btn btn-outline" [routerLink]="['/patients', current.id]">Annuler</a>
+      } @else {
+        <a class="btn btn-outline" routerLink="/patients">Annuler</a>
+      }
+      <button class="btn btn-primary" type="submit" [disabled]="submitting()">
+        {{ submitting() ? 'Enregistrement…' : (editing() ? 'Enregistrer les modifications' : 'Créer le dossier') }}
+      </button>
+    </div>
+  </form>
+}
