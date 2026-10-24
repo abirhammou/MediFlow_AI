@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from datetime import date
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,9 +24,22 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    description: str | None = Field(default=None, min_length=1, max_length=1000)
-    due_date: date | None = None
+    description: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+    due_date: Optional[date] = None
+    status: Optional[TaskStatus] = None
+
+
+class TaskListParams(BaseModel):
+    """Paramètres de filtrage pour la liste des tâches."""
     status: TaskStatus | None = None
+
+
+class TaskStats(BaseModel):
+    """Compteurs par statut."""
+    total: int
+    pending: int
+    done: int
+    cancelled: int
 
 
 class TaskOut(BaseModel):
