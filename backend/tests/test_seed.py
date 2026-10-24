@@ -3,6 +3,7 @@ from app.modules.auth.models import Role, User
 from app.modules.faq.models import FaqEntry
 from app.modules.patients.models import Patient
 from scripts.seed import ACCOUNTS, APPOINTMENTS, FAQ, PATIENTS, seed
+from scripts.seed_dev_patients import DEV_PATIENTS
 
 
 async def counts() -> dict[str, int]:
@@ -21,7 +22,7 @@ async def test_seed_is_idempotent(db):
 
     assert after_first == {
         "users": len(ACCOUNTS) + 1,
-        "patients": len(PATIENTS),
+        "patients": len(PATIENTS) + len(DEV_PATIENTS),
         "appointments": len(APPOINTMENTS),
         "faq_entries": len(FAQ),
     }
