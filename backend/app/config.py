@@ -3,11 +3,12 @@ from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import dotenv_values
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 ProviderName = Literal["mock", "openai_compatible", "anthropic"]
+INSECURE_JWT_SECRET = "CHANGE-ME-use-a-local-secret-of-at-least-32-characters"
 MODULES_DIRECTORY = Path(__file__).resolve().parent / "modules"
 
 
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
         env_file=Path(__file__).resolve().parents[1] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     llm_mock: bool = True
@@ -23,8 +25,32 @@ class Settings(BaseSettings):
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_db: str = "mediflow"
     cors_origins: str = "http://localhost:4200"
-    environment: str = "development"
+    app_env: Literal["development", "production"] = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
+    )
     expose_template: bool | None = None
+    jwt_secret: str = INSECURE_JWT_SECRET
+    jwt_expire_minutes: int = Field(default=60, gt=0)
+    admin_email: str | None = None
+    admin_password: str | None = None
+
+    @property
+    def environment(self) -> str:
+        return self.app_env
+
+    def validate_runtime_configuration(self) -> None:
+        secret = self.jwt_secret.strip()
+        if self.app_env == "production" and (
+            not secret
+            or len(secret) < 32
+            or secret == INSECURE_JWT_SECRET
+            or "CHANGE-ME" in secret.upper()
+        ):
+            raise ValueError(
+                "APP_ENV=production exige un JWT_SECRET défini, non factice et "
+                "d'au moins 32 caractères."
+            )
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -53,6 +79,10 @@ class Settings(BaseSettings):
             setting("MODEL"),
             setting("API_KEY"),
         )
+
+
+settings = Settings()
+settings.validate_runtime_configuration()
 
 
 settings = Settings()

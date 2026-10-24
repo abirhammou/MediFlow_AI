@@ -43,6 +43,10 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/notes/summarize",
         "/api/notes/{note_id}",
         "/api/llm/status",
+        "/api/auth/register",
+        "/api/auth/login",
+        "/api/auth/me",
+        "/api/auth/change-password",
     }
 
 

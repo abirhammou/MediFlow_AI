@@ -36,7 +36,15 @@ def module_llm_name(directory_name: str) -> str:
 
 
 def discover_module_names(config: Settings = settings) -> list[str]:
-    return [module_llm_name(name) for name, _ in iter_module_directories(config)]
+    discovered: list[str] = []
+    for name, _ in iter_module_directories(config):
+        try:
+            module = _load_router(name)
+            if getattr(module, "LLM_ENABLED", True):
+                discovered.append(module_llm_name(name))
+        except Exception as exc:
+            logger.warning("Lecture de la configuration LLM du module %s impossible : %s", name, exc)
+    return discovered
 
 
 def _load_router(module_name: str) -> ModuleType:
