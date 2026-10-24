@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService, ROLE_LABELS, Role, apiErrorMessage } from '../../core/auth/auth.service';
+import { PATIENT_ROLES } from '../../features/patients/patient-permissions';
 import { Icon } from '../../shared/icon/icon';
 import { Logo } from '../../shared/logo/logo';
 
@@ -37,7 +39,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeSt
 
 @Component({
   selector: 'app-dashboard',
-  imports: [Logo, Icon],
+  imports: [Logo, Icon, RouterLink],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -45,6 +47,7 @@ export class Dashboard {
   protected auth = inject(AuthService);
   private http = inject(HttpClient);
 
+  protected patientRoles: readonly Role[] = PATIENT_ROLES.read;
   summary = signal<DashboardSummary | null>(null);
   error = signal<string | null>(null);
 

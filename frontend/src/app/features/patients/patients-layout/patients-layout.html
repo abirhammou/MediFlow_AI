@@ -1,0 +1,32 @@
+<div class="patients-area">
+  <header class="topbar">
+    <div class="container bar">
+      <div class="nav-group">
+        <app-logo />
+        <nav class="nav" aria-label="Navigation principale">
+          <a routerLink="/dashboard">Tableau de bord</a>
+          <a routerLink="/patients" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+            Patients
+          </a>
+          @if (perms.canRestore()) {
+            <a routerLink="/patients/deleted" routerLinkActive="active">Patients supprimés</a>
+          }
+        </nav>
+      </div>
+      <div class="account">
+        @if (auth.user(); as user) {
+          <span class="who">
+            <app-icon name="user" [size]="16" />
+            {{ user.first_name }} {{ user.last_name }}
+            <span class="role">{{ roleLabels[user.role] }}</span>
+          </span>
+        }
+        <button type="button" class="btn btn-outline btn-sm" (click)="auth.logout()">Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page">
+    <router-outlet />
+  </main>
+</div>

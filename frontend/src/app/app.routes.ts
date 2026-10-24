@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/auth/auth.guard';
+import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
+import { PATIENT_ROLES } from './features/patients/patient-permissions';
 
 export const routes: Routes = [
   {
@@ -25,6 +26,11 @@ export const routes: Routes = [
     title: 'Tableau de bord · MediFlow AI',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/dashboard/dashboard').then(m => m.Dashboard),
+  },
+  {
+    path: 'patients',
+    canActivate: [authGuard, roleGuard(PATIENT_ROLES.read)],
+    loadChildren: () => import('./features/patients/patients.routes').then(m => m.PATIENT_ROUTES),
   },
   { path: '**', redirectTo: '' },
 ];

@@ -3,6 +3,9 @@
     <app-logo />
     <div class="account">
       @if (auth.user(); as user) {
+        @if (patientRoles.includes(user.role)) {
+          <a routerLink="/patients" class="btn btn-outline btn-sm">Patients</a>
+        }
         <span class="who">
           <app-icon name="user" [size]="16" />
           {{ user.first_name }} {{ user.last_name }}
