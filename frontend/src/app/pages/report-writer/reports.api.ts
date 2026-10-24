@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 
 export type ReportStatus = 'DRAFT' | 'FINAL' | 'ARCHIVED';
 
@@ -38,11 +38,18 @@ export interface ReportQuery {
   size: number;
 }
 
+export interface ReportStats {
+  draft: number;
+  final: number;
+  archived: number;
+  recent: ReportListItem[]; // 100 derniers brouillons/finalisés, pour le graphique d'activité
+}
+
 /** Admin : lecture de tous les comptes rendus + archivage (le reste est réservé au médecin). */
 @Injectable({ providedIn: 'root' })
 export class ReportsApi {
   private readonly http = inject(HttpClient);
-  private readonly base = '/api/reports'; // adapte avec ton environment.apiUrl / proxy
+  private readonly base = '/api/reports';
 
   list(query: ReportQuery): Observable<ReportPage> {
     let params = new HttpParams().set('page', query.page).set('size', query.size);
@@ -58,5 +65,36 @@ export class ReportsApi {
 
   archive(id: string): Observable<ReportOut> {
     return this.http.post<ReportOut>(`${this.base}/${id}/archive`, {});
+  }
+
+  /** Pas d'endpoint de stats côté backend : on lit les `total` de pages d'un seul élément. */
+  stats(): Observable<ReportStats> {
+    const one = (status: ReportStatus) => this.list({ status, page: 1, size: 1 }).pipe(map((p) => p.total));
+    return forkJoin({
+      draft: one('DRAFT'),
+      final: one('FINAL'),
+      archived: one('ARCHIVED'),
+      recent: this.list({ page: 1, size: 100 }).pipe(map((p) => p.items)),
+    });
+  }
+
+  /**
+   * Noms des médecins via /api/users (réservé à l'admin). Si l'endpoint est absent ou refuse l'accès,
+   * on retourne {} et l'interface retombe sur les identifiants.
+   */
+  doctors(): Observable<Record<string, string>> {
+    return this.http.get<unknown>('/api/users').pipe(
+      map((res) => {
+        const list = (Array.isArray(res) ? res : ((res as { items?: unknown[] })?.items ?? [])) as Record<string, unknown>[];
+        const names: Record<string, string> = {};
+        for (const u of list) {
+          const id = String(u['id'] ?? u['_id'] ?? '');
+          const name = [u['first_name'], u['last_name']].filter(Boolean).join(' ');
+          if (id && name) names[id] = u['role'] === 'DOCTOR' ? `Dr ${name}` : name;
+        }
+        return names;
+      }),
+      catchError(() => of({} as Record<string, string>)),
+    );
   }
 }
