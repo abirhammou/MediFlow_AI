@@ -7,6 +7,19 @@
 
 Les noms acceptés sont en minuscules, composés de lettres et d'underscores. Le générateur ajoute les réglages LLM à `.env.example` et `.env`, et copie les tests du module modèle.
 
+> **Attention : le template n'est pas protégé**
+>
+> Les routes de `_template` (`/api/notes`) sont publiques : elles n'ont aucune dépendance d'authentification, car c'est un exemple pour apprendre. Tout module copié depuis `_template` **DOIT** protéger ses routes avec `Depends(require_roles(...))` selon le tableau de droits, avant d'être mergé dans `main`.
+>
+> Pour la démonstration et le déploiement, mettre `EXPOSE_TEMPLATE=false` dans `backend/.env`.
+>
+> **Checklist avant de merger un module**
+> - Toutes les routes sont protégées.
+> - Un patient ne voit que ses propres données (`owns_patient_record`).
+> - Aucune écriture n'est faite dans la collection d'un autre module.
+> - Aucune donnée personnelle brute n'est envoyée au LLM : utiliser une liste blanche de champs.
+> - Pour chaque route, ajouter un test avec un compte autorisé et un test avec un compte refusé.
+
 **ne modifiez pas main.py, il découvre les modules automatiquement** : chaque dossier de module avec un `router.py` exportant `router` est chargé au démarrage.
 
 Le module interne `_template` n'est exposé que si `EXPOSE_TEMPLATE=true` (valeur du `.env` de développement).

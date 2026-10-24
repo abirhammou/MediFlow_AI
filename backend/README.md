@@ -22,6 +22,10 @@ python -m uvicorn app.main:app --reload
 
 L'API répond sur `http://localhost:8000`, la documentation interactive sur `/docs` et le contrôle de santé sur `/health`. Les routes fonctionnelles de démonstration du module notes sont sous `/api/notes`.
 
+## Tableau de bord
+
+`GET /api/dashboard/summary` nécessite un compte actif et adapte les indicateurs au rôle connecté. Les compteurs patients et rendez-vous valent zéro tant que leurs collections ne contiennent pas de données ; cette route ne crée pas de collection et n'appelle aucun LLM. Un patient sans `patient_id` reçoit une alerte lui indiquant de contacter l'accueil.
+
 ## Configuration LLM
 
 Les configurations et clés sont indépendantes par module. La clé n'est jamais exposée par l'API. Une clé absente en environnement de développement active le mock; hors développement, elle produit une erreur 503.

@@ -55,6 +55,7 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/users/{user_id}/role",
         "/api/users/{user_id}/link-patient",
         "/api/users/{user_id}/unlink-patient",
+        "/api/dashboard/summary",
     }
 
 
