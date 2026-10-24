@@ -1,16 +1,20 @@
 import time
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
 from beanie import PydanticObjectId
 from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
+from pydantic import SecretStr
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
+from app.core.config import settings
 from app.core.db import DOCUMENT_MODELS, create_client, get_db, init_db
+from app.llm.client import litellm_module
 from app.main import app
 from app.modules.auth.models import Role, User
 from app.security import create_access_token, hash_password
@@ -20,6 +24,81 @@ MONGO_IMAGE = "mongo:7"
 APP_USER = "mediflow_app"
 APP_PASSWORD = "test-app-password"
 DB_NAME = "mediflow"
+
+# ---------------------------------------------------------------------
+# LLM: tests never call a real provider
+# ---------------------------------------------------------------------
+
+PRIMARY_MODEL = "gemini/primary-test"
+FALLBACK_MODEL = "groq/fallback-test"
+TEST_GEMINI_KEY = "test-gemini-key-0123456789"
+TEST_GROQ_KEY = "test-groq-key-0123456789"
+FAKE_SUMMARY = (
+    "Identité\n- Dossier PAT-2026-00001, 36 ans, Femme\n"
+    "Couverture\n- CNAM\n"
+    "Points administratifs\n- Préfère les rendez-vous le matin.\n"
+    "À vérifier\n- Rien à signaler"
+)
+
+
+class FakeLLM:
+    """Stands in for `litellm.acompletion`.
+
+    `outcomes[model]` is a list consumed one call at a time (the last item
+    repeats): a string is the answer, an exception is raised.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.outcomes: dict[str, list[str | Exception]] = {}
+
+    def set(self, model: str, *outcomes: str | Exception) -> None:
+        self.outcomes[model] = list(outcomes)
+
+    def models_called(self) -> list[str]:
+        return [call["model"] for call in self.calls]
+
+    async def __call__(self, *, model: str, messages: list[dict[str, str]], **kwargs: Any):
+        self.calls.append({"model": model, "messages": messages, **kwargs})
+        queue = self.outcomes.get(model, [FAKE_SUMMARY])
+        outcome = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return litellm_module().ModelResponse(
+            model=model.split("/", 1)[1],
+            choices=[
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": outcome},
+                }
+            ],
+            usage={"prompt_tokens": 120, "completion_tokens": 80, "total_tokens": 200},
+        )
+
+
+@pytest.fixture(autouse=True)
+def no_real_llm_calls(monkeypatch):
+    """Any test reaching LiteLLM without `fake_llm` fails instead of calling the network."""
+
+    async def forbidden(**_: Any):
+        raise AssertionError("Real LLM call in a test: use the fake_llm fixture.")
+
+    monkeypatch.setattr(litellm_module(), "acompletion", forbidden)
+
+
+@pytest.fixture
+def fake_llm(monkeypatch) -> FakeLLM:
+    """Real (non-mock) LLM settings, Gemini primary then Groq fallback, fake answers."""
+    fake = FakeLLM()
+    monkeypatch.setattr(litellm_module(), "acompletion", fake)
+    monkeypatch.setattr(settings, "llm_mock", False)
+    monkeypatch.setattr(settings, "llm_model", PRIMARY_MODEL)
+    monkeypatch.setattr(settings, "llm_fallback_models", FALLBACK_MODEL)
+    monkeypatch.setattr(settings, "gemini_api_key", SecretStr(TEST_GEMINI_KEY))
+    monkeypatch.setattr(settings, "groq_api_key", SecretStr(TEST_GROQ_KEY))
+    monkeypatch.setattr(settings, "llm_max_retries", 1)
+    return fake
 
 
 @pytest.fixture
@@ -124,6 +203,8 @@ async def db(
     for model in DOCUMENT_MODELS:
         name = model.Settings.name
         await database[name].delete_many({"_id": {"$nin": reference_ids.get(name, [])}})
+
+
 # ---------------------------------------------------------------------
 # Auth helpers (real MongoDB: the users validator is enforced)
 # ---------------------------------------------------------------------

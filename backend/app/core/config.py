@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import dotenv_values
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["mock", "openai_compatible", "anthropic"]
@@ -23,7 +23,18 @@ class Settings(BaseSettings):
 
     env: Environment = "dev"
     llm_mock: bool = True
-    llm_timeout_seconds: float = Field(default=20, gt=0)
+    llm_timeout_seconds: float = Field(default=30, gt=0)
+    # Shared LiteLLM client (app/llm/client.py): provider-prefixed model IDs.
+    llm_model: str = "gemini/gemini-3.8-flash"
+    llm_fallback_models: str = "groq/llama-3.3-70b-versatile"
+    gemini_api_key: SecretStr | None = None
+    groq_api_key: SecretStr | None = None
+    llm_max_retries: int = Field(default=1, ge=0, le=5)
+    llm_temperature: float = Field(default=0.2, ge=0, le=2)
+    llm_max_tokens: int = Field(default=800, gt=0)
+    # Thinking models (Gemini 3+): their reasoning counts against max_tokens.
+    # Empty: provider default; dropped for models without reasoning.
+    llm_reasoning_effort: Literal["minimal", "low", "medium", "high", ""] = "low"
     # Must authenticate as mediflow_app (readWrite on mediflow), never as root.
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db: str = "mediflow"
@@ -43,13 +54,26 @@ class Settings(BaseSettings):
             or "CHANGE-ME" in secret.upper()
         ):
             raise ValueError(
-                "ENV=prod exige un JWT_SECRET défini, non factice et "
-                "d'au moins 32 caractères."
+                "ENV=prod exige un JWT_SECRET défini, non factice et d'au moins 32 caractères."
             )
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def llm_models(self) -> list[str]:
+        """Primary model first, then the fallbacks in order (no duplicates)."""
+        names = [self.llm_model, *self.llm_fallback_models.split(",")]
+        return list(dict.fromkeys(name.strip() for name in names if name.strip()))
+
+    def llm_api_key(self, model: str) -> str | None:
+        """Key for a `provider/model` ID; None lets LiteLLM read its own env variable."""
+        provider = model.split("/", 1)[0]
+        secret = {"gemini": self.gemini_api_key, "groq": self.groq_api_key}.get(provider)
+        if secret is None:
+            return None
+        return secret.get_secret_value() or None
 
     @property
     def should_expose_template(self) -> bool:
