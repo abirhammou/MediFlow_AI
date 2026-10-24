@@ -23,6 +23,18 @@ export const PATIENT_ROUTES: Routes = [
         loadComponent: () => import('./patient-form/patient-form').then(m => m.PatientForm),
       },
       {
+        path: 'deleted',
+        title: 'Patients supprimés · MediFlow AI',
+        canActivate: [roleGuard(PATIENT_ROLES.restore)],
+        loadComponent: () =>
+          import('./deleted-patients/deleted-patients').then(m => m.DeletedPatients),
+      },
+      {
+        path: ':id',
+        title: 'Dossier patient · MediFlow AI',
+        loadComponent: () => import('./patient-detail/patient-detail').then(m => m.PatientDetail),
+      },
+      {
         path: ':id/edit',
         title: 'Modifier le dossier · MediFlow AI',
         canActivate: [roleGuard(PATIENT_ROLES.write)],
