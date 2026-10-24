@@ -1,0 +1,20 @@
+.toolbar { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)); gap: .75rem;
+  padding: 1rem; border-bottom: 1px solid var(--border); }
+.search { position: relative;
+  app-icon { position: absolute; left: .8rem; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .input { padding-left: 2.4rem; }
+}
+select.input { appearance: auto; padding-right: .5rem; }
+
+tr.clickable { cursor: pointer;
+  &:hover td, &:focus-visible td { background: var(--primary-50); }
+}
+.sort { display: inline-flex; align-items: center; gap: .25rem; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer;
+  &:hover, &.active { color: var(--primary); }
+}
+
+@media (max-width: 860px) {
+  .toolbar { grid-template-columns: 1fr 1fr; }
+  .search { grid-column: 1 / -1; }
+}
