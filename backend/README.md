@@ -1,6 +1,6 @@
 # Backend MediFlow AI
 
-MediFlow AI est une maquette d'API FastAPI asynchrone avec MongoDB via Motor. Le mode mock est activé par défaut : les tests et l'application ne contactent aucun fournisseur LLM. Aucune authentification n'est installée dans cette maquette.
+MediFlow AI est une maquette d'API FastAPI asynchrone avec MongoDB via Motor. Le mode mock est activé par défaut : les tests et l'application ne contactent aucun fournisseur LLM.
 
 ## Prérequis
 
@@ -40,6 +40,10 @@ Pour brancher un vrai LLM :
 4. Tester via `/api/llm/status`.
 
 `*_LLM_PROVIDER` accepte `mock`, `openai_compatible` ou `anthropic`. Pour les fournisseurs compatibles OpenAI, `*_LLM_BASE_URL` correspond à l'URL de base de l'API. L'anonymisation est appliquée au texte avant tout appel externe.
+
+## Authentification
+
+L'API fournit une authentification par JWT avec mots de passe hachés par bcrypt. L'inscription publique crée des comptes patient actifs ; les comptes médecin et secrétaire restent en attente d'approbation. La création du premier administrateur est effectuée séparément avec `python scripts/seed_admin.py`. Configurez `JWT_SECRET` avec une valeur privée d'au moins 32 caractères avant un déploiement en production ; n'utilisez jamais la valeur factice de `.env.example`.
 
 ## Tests
 

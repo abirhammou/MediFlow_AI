@@ -177,6 +177,29 @@ async def test_me_requires_valid_token(client, user_factory, token_factory):
 
 
 @pytest.mark.asyncio
+async def test_me_rejects_account_disabled_after_token_issue(
+    client,
+    mock_database,
+    user_factory,
+    token_factory,
+):
+    user = await user_factory(email="disabled-after-token@example.test")
+    token = token_factory(str(user["_id"]))
+    await mock_database["users"].update_one(
+        {"_id": user["_id"]},
+        {"$set": {"status": "disabled"}},
+    )
+
+    response = await client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Le compte n'est pas actif."
+
+
+@pytest.mark.asyncio
 async def test_change_password_requires_current_password(client, user_factory, token_factory):
     user = await user_factory(
         email="password@example.test",

@@ -47,6 +47,14 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/auth/login",
         "/api/auth/me",
         "/api/auth/change-password",
+        "/api/users",
+        "/api/users/{user_id}",
+        "/api/users/{user_id}/approve",
+        "/api/users/{user_id}/disable",
+        "/api/users/{user_id}/enable",
+        "/api/users/{user_id}/role",
+        "/api/users/{user_id}/link-patient",
+        "/api/users/{user_id}/unlink-patient",
     }
 
 
