@@ -110,10 +110,27 @@ PATIENTS: list[dict[str, Any]] = [
         "insurance": Insurance(provider="CNAM", number="CN-100245"),
         "emergency_contact": EmergencyContact(name="Karim Haddad", phone="+216 22 987 654", relation="Époux"),
         "administrative_notes": (
-            "Hypertension suivie depuis 2022. Préfère les rendez-vous le matin, avant 10h"
-            " (travaille l'après-midi). Carnet de soins CNAM renouvelé en janvier 2026."
-            " Utilise l'espace patient : rappels par SMS plutôt que par appel."
-            " Son époux est la personne à prévenir."
+            "Motif de suivi : hypertension artérielle découverte en mars 2022. La patiente, "
+            "comptable dans une agence bancaire du centre de Tunis, se plaignait depuis "
+            "plusieurs semaines de maux de tête en fin de journée et de bourdonnements "
+            "d'oreille. Une mesure faite par hasard en pharmacie avait relevé 165/100 ; elle "
+            "est venue consulter le lendemain.\n\n"
+            "Histoire : antécédents familiaux importants (père décédé d'un AVC à 61 ans, mère"
+            " hypertendue). Deux grossesses (2014 et 2018), la seconde compliquée d'une "
+            "prééclampsie à 34 semaines avec césarienne en urgence. Tabagisme arrêté en 2018."
+            " Surpoids modéré, sédentarité liée au travail de bureau.\n\n"
+            "État actuel : sous amlodipine 5 mg depuis 2022. Tension globalement contrôlée au"
+            " cabinet (autour de 130/85), mais automesures plus élevées pendant les semaines "
+            "de clôture comptable, avec stress et manque de sommeil. Signale des chevilles "
+            "gonflées le soir, peut-être dues au traitement, à réévaluer. Bilan de janvier "
+            "2026 : reins normaux, cholestérol LDL légèrement élevé.\n\n"
+            "Suivi : consultation tous les trois mois et contrôle annuel chez le cardiologue "
+            "du cabinet (rendez-vous déjà fixé). Holter tensionnel envisagé si les chiffres "
+            "restent élevés.\n\n"
+            "Points pratiques : préfère les rendez-vous le matin avant 10h (travaille "
+            "l'après-midi). Carnet de soins CNAM renouvelé en janvier 2026. Utilise l'espace "
+            "patient : rappels par SMS plutôt que par appel. Son époux est la personne à "
+            "prévenir."
         ),
     },
     {
@@ -127,10 +144,26 @@ PATIENTS: list[dict[str, Any]] = [
         "blood_type": BloodType.O_POS,
         "insurance": Insurance(provider="CNAM", number="CN-200871"),
         "administrative_notes": (
-            "Diabète de type 2. Renouvellement d'ordonnance tous les trois mois."
-            " Prise en charge CNAM maladie chronique (APCI) valable jusqu'au 31/03/2027 :"
-            " lancer le renouvellement un mois avant. Deux rendez-vous manqués en 2026"
-            " sans prévenir : appeler la veille pour confirmer."
+            "Motif de suivi : diabète de type 2 découvert en 2017 lors d'une visite de "
+            "médecine du travail (glycémie à jeun à 1,62 g/l). Le patient, chauffeur de poids"
+            " lourd pour une société de transport de Sfax, passe de longues journées sur la "
+            "route, mange souvent sur le pouce et dort mal.\n\n"
+            "Histoire : pendant les premières années, metformine seule prise de façon "
+            "irrégulière ; il arrêtait les comprimés pendant les longs trajets à cause des "
+            "troubles digestifs. En 2023, hémoglobine glyquée à 9,4 % et plaie du pied droit "
+            "lente à cicatriser, causée par une chaussure de sécurité trop serrée. Cet "
+            "épisode lui a fait prendre la maladie au sérieux : ajout de gliclazide, "
+            "consultation diététique, chaussures adaptées.\n\n"
+            "État actuel : HbA1c à 7,6 % en août 2026, en amélioration mais pas encore à "
+            "l'objectif. A perdu 6 kg en un an. Se plaint de fourmillements dans les deux "
+            "pieds la nuit : examen des pieds à chaque visite. Fond d'œil de 2024 normal, à "
+            "refaire. Tension limite (140/88), pas encore traitée.\n\n"
+            "Suivi : renouvellement d'ordonnance tous les trois mois, prise de sang avant "
+            "chaque visite.\n\n"
+            "Points pratiques : prise en charge CNAM maladie chronique (APCI) valable "
+            "jusqu'au 31/03/2027, lancer le renouvellement un mois avant. Deux rendez-vous "
+            "manqués en 2026 sans prévenir à cause de déplacements imprévus : l'appeler la "
+            "veille pour confirmer."
         ),
     },
     {
@@ -143,10 +176,24 @@ PATIENTS: list[dict[str, Any]] = [
         "address": Address(city="Sousse", postal_code="4000"),
         "blood_type": BloodType.B_POS,
         "administrative_notes": (
-            "Palpitations signalées, adressée en cardiologie. Pas d'assurance déclarée :"
-            " règlement en espèces, reçu à remettre à chaque consultation. Étudiante,"
-            " disponible le samedi ou en fin de journée. Courrier du cardiologue attendu,"
-            " à classer dès réception."
+            "Motif : palpitations. La patiente, doctorante en biologie à Sousse, est venue en"
+            " juin 2026 pour des épisodes où son cœur s'emballe brutalement, surtout le soir "
+            "ou après un café. Ils durent de quelques minutes à une demi-heure, parfois avec "
+            "une sensation de malaise, sans perte de connaissance. Le premier épisode remonte"
+            " à fin 2025, pendant la rédaction de sa thèse : beaucoup de café, nuits courtes,"
+            " forte anxiété.\n\n"
+            "Antécédents : asthme dans l'enfance, sans crise depuis l'adolescence. Pas de "
+            "traitement en dehors d'une contraception orale. Sa mère aurait une maladie de la"
+            " thyroïde (non précisée).\n\n"
+            "Examen et bilan : examen normal au cabinet, ECG de repos normal. TSH demandée, "
+            "résultat attendu. Adressée en cardiologie pour un Holter ECG et une échographie "
+            "cardiaque ; l'échographie prévue en octobre a été annulée (patiente "
+            "indisponible), à reprogrammer. En attendant : moins de café, sommeil régulier, "
+            "consulter tout de suite en cas de perte de connaissance ou de douleur dans la "
+            "poitrine.\n\n"
+            "Points pratiques : pas d'assurance déclarée, règlement en espèces, reçu à "
+            "remettre à chaque consultation. Disponible le samedi ou en fin de journée. "
+            "Courrier du cardiologue attendu, à classer dès réception."
         ),
     },
     {
@@ -161,11 +208,23 @@ PATIENTS: list[dict[str, Any]] = [
         "insurance": Insurance(provider="Assurance privée", number="AP-55120"),
         "emergency_contact": EmergencyContact(name="Nadia Jaziri", phone="+216 52 111 222", relation="Fille"),
         "administrative_notes": (
-            "Assurance privée : accord préalable obligatoire avant tout examen d'imagerie"
-            " (réponse sous 48 h). Mobilité réduite depuis une opération du genou :"
-            " prévoir le cabinet du rez-de-chaussée. Sa fille gère les rendez-vous,"
-            " joignable au +216 52 111 222. Facture de mars 2026 non réglée,"
-            " relance envoyée le 12/04/2026."
+            "Motif actuel : douleurs lombaires depuis environ deux mois, descendant parfois "
+            "dans la jambe gauche, aggravées en position assise prolongée. Le patient, ancien"
+            " mécanicien naval au port de Bizerte, retraité depuis 2022, a toujours eu le dos"
+            " fragile après des années à soulever des pièces lourdes. Les douleurs ont "
+            "commencé après avoir aidé son fils à déménager.\n\n"
+            "Histoire : prothèse totale du genou droit en novembre 2024 dans une clinique "
+            "privée de Tunis, avec une rééducation longue. Depuis, il marche avec une canne "
+            "sur les longues distances et a pris environ 8 kg. Hypertension traitée depuis "
+            "2015 (périndopril), cholestérol sous statine. Ancien gros fumeur, arrêt en 2010.\n\n"
+            "État actuel : douleur à 6/10, sommeil perturbé, pas de trouble urinaire ni de "
+            "faiblesse de la jambe. Prend du paracétamol et, de lui-même, de l'ibuprofène "
+            "acheté en pharmacie, à revoir à cause de la tension. Kinésithérapie prescrite ; "
+            "IRM lombaire si pas d'amélioration dans un mois.\n\n"
+            "Points pratiques : assurance privée, accord préalable obligatoire avant tout "
+            "examen d'imagerie (réponse sous 48 h). Mobilité réduite : prévoir le cabinet du "
+            "rez-de-chaussée. Sa fille gère les rendez-vous, joignable au +216 52 111 222. "
+            "Facture de mars 2026 non réglée, relance envoyée le 12/04/2026."
         ),
     },
     {
@@ -178,10 +237,23 @@ PATIENTS: list[dict[str, Any]] = [
         "address": Address(city="Nabeul", postal_code="8000"),
         "blood_type": BloodType.O_NEG,
         "administrative_notes": (
-            "Nouvelle patiente, premier contact le 02/09/2026. Carnet de vaccination à"
-            " compléter : rappel prévu dans le mois. Pas d'assurance pour le moment,"
-            " souhaite s'affilier à la CNAM (formulaire à lui remettre). Préfère être"
-            " contactée par email : nour.mansouri@example.test."
+            "Motif : mise à jour des vaccinations avant un départ à l'étranger. La patiente, "
+            "jeune diplômée en informatique, a obtenu un contrat de travail en Allemagne et "
+            "doit présenter un carnet de vaccination à jour avant l'été 2027. Première "
+            "consultation le 02/09/2026, adressée par une amie.\n\n"
+            "Histoire : enfance à Nabeul sans problème de santé particulier. Son carnet de "
+            "vaccination a été en partie perdu lors d'un déménagement : seuls les vaccins "
+            "jusqu'à 6 ans sont notés. Pas de rappel diphtérie-tétanos depuis l'adolescence "
+            "selon ses souvenirs. Varicelle dans l'enfance. Allergie déclarée aux arachides "
+            "(urticaire), jamais de réaction grave.\n\n"
+            "État actuel : en bonne santé, aucun traitement. Appréhende les piqûres (malaise "
+            "lors d'une prise de sang en 2021) : la faire allonger pour les vaccins. "
+            "Sérologies demandées (rougeole, hépatite B) pour éviter des doses inutiles. "
+            "Rappel DTP prévu dans le mois, puis calendrier selon les résultats.\n\n"
+            "Points pratiques : pas d'assurance pour le moment, souhaite s'affilier à la CNAM"
+            " (formulaire à lui remettre). Aura besoin d'un certificat de vaccination en "
+            "anglais ou en allemand. Préfère être contactée par email : "
+            "nour.mansouri@example.test."
         ),
     },
 ]
