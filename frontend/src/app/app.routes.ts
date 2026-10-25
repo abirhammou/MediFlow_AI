@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
+import { BILLING_ROLES } from './features/billing/billing.model';
 import { PATIENT_ROLES } from './features/patients/patient-permissions';
 
 export const routes: Routes = [
@@ -43,6 +44,12 @@ export const routes: Routes = [
         path: 'patients',
         canActivate: [roleGuard(PATIENT_ROLES.read)],
         loadChildren: () => import('./features/patients/patients.routes').then(m => m.PATIENT_ROUTES),
+      },
+      {
+        path: 'billing',
+        title: 'Facturation · MediFlow AI',
+        canActivate: [roleGuard(BILLING_ROLES.manage)],
+        loadComponent: () => import('./features/billing/billing-page/billing-page').then(m => m.BillingPage),
       },
       {
         path: 'report-writer',

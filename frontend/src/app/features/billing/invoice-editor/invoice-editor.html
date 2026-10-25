@@ -1,0 +1,74 @@
+<form class="editor" (submit)="$event.preventDefault(); save()">
+  <h2>{{ invoice() ? 'Modifier le brouillon ' + invoice()!.number : 'Nouvelle facture' }}</h2>
+
+  <div class="field">
+    <span>Patient</span>
+    @if (patient(); as p) {
+      <div class="picked">
+        <strong>{{ p.label }}</strong>
+        @if (!invoice() && !patientId()) {
+          <button type="button" class="btn btn-outline btn-sm" (click)="patient.set(null)">Changer</button>
+        }
+      </div>
+    } @else {
+      <input class="input" placeholder="Nom ou n° de dossier (2 lettres min.)" [value]="search()"
+             (input)="onSearch($any($event.target).value)" aria-label="Rechercher un patient" />
+      @if (matches().length) {
+        <ul class="matches">
+          @for (m of matches(); track m.id) {
+            <li><button type="button" (click)="choose(m)">{{ m.lastName }} {{ m.firstName }} · {{ m.recordNumber }}</button></li>
+          }
+        </ul>
+      }
+    }
+  </div>
+
+  <table class="lines-table">
+    <thead><tr><th>Désignation</th><th>Qté</th><th>Prix unitaire (TND)</th><th>Montant</th><th></th></tr></thead>
+    <tbody>
+      @for (line of lines(); track $index; let i = $index) {
+        <tr>
+          <td><input class="input" maxlength="200" [value]="line.label" placeholder="Consultation…"
+                     (input)="setLine(i, { label: $any($event.target).value })" aria-label="Désignation" /></td>
+          <td><input class="input qty" type="number" min="1" max="1000" [value]="line.quantity"
+                     (input)="setLine(i, { quantity: +$any($event.target).value })" aria-label="Quantité" /></td>
+          <td><input class="input money" inputmode="decimal" [value]="line.price" placeholder="45,000"
+                     (input)="setLine(i, { price: $any($event.target).value })" aria-label="Prix unitaire" /></td>
+          <td class="num">{{ formatTnd(amounts()[i]) }}</td>
+          <td>
+            @if (lines().length > 1) {
+              <button type="button" class="icon-btn" aria-label="Retirer la ligne" (click)="removeLine(i)"><app-icon name="trash" [size]="16" /></button>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+  <button type="button" class="btn btn-outline btn-sm" (click)="addLine()"><app-icon name="plus" [size]="16" /> Ajouter une ligne</button>
+
+  <div class="row">
+    <label class="field">
+      <span>Part assurance (TND)</span>
+      <input class="input money" inputmode="decimal" placeholder="0,000" [value]="insurance()" (input)="insurance.set($any($event.target).value)" />
+    </label>
+    <label class="field grow">
+      <span>Note (facultatif)</span>
+      <input class="input" maxlength="500" [value]="note()" (input)="note.set($any($event.target).value)" />
+    </label>
+  </div>
+
+  <dl class="totals">
+    <dt>Total</dt><dd>{{ formatTnd(total()) }}</dd>
+    <dt>Part patient</dt><dd><strong>{{ formatTnd(patientShare()) }}</strong></dd>
+  </dl>
+
+  @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+  @if (invalid(); as reason) { <p class="muted hint">{{ reason }}</p> }
+
+  <div class="actions end">
+    <button type="button" class="btn btn-outline btn-sm" [disabled]="saving()" (click)="cancelled.emit()">Annuler</button>
+    <button type="submit" class="btn btn-primary btn-sm" [disabled]="saving() || !!invalid()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer le brouillon' }}
+    </button>
+  </div>
+</form>

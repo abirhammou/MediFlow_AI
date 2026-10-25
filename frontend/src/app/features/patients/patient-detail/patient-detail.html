@@ -43,6 +43,10 @@
     <app-patient-files [patientId]="p.id" />
   }
 
+  @if (perms.canManageBilling()) {
+    <app-patient-invoices [patientId]="p.id" />
+  }
+
   <div class="cards">
     <section class="card info">
       <h2>Identité</h2>

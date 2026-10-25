@@ -1,6 +1,7 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { AuthService, Role } from '../../core/auth/auth.service';
 import { ReportListItem } from '../../pages/report-writer/reports.api';
+import { BILLING_ROLES } from '../billing/billing.model';
 import { FileCategory } from './patient-file.model';
 
 /** Same matrix as PATIENT_ROLES in backend/app/modules/patients/router.py. */
@@ -69,6 +70,7 @@ export class PatientPermissions {
   readonly canReviewSummary = this.has(SUMMARY_ROLES.review);
   readonly canReadReports = this.has(REPORT_ROLES.read);
   readonly canWriteReports = this.has(REPORT_ROLES.write);
+  readonly canManageBilling = this.has(BILLING_ROLES.manage);
   readonly canUseMedicalAi = this.has(HISTORY_ROLES.use);
   readonly canReviewMedicalAi = this.has(HISTORY_ROLES.review);
   readonly readableFileCategories = computed(() => fileCategoriesFor(this.auth.user()?.role, 'read'));

@@ -1,0 +1,144 @@
+<div class="billing">
+  <header class="page-head">
+    <div>
+      <h1>Facturation</h1>
+      <p class="muted">Factures, règlements, impayés et recettes · montants en dinars tunisiens</p>
+    </div>
+    @if (tab() === 'invoices' && !editing()) {
+      <button type="button" class="btn btn-primary btn-sm" (click)="editing.set('new'); selected.set(null)">
+        <app-icon name="plus" [size]="16" /> Nouvelle facture
+      </button>
+    }
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'invoices'" [class.active]="tab() === 'invoices'" (click)="setTab('invoices')">Factures</button>
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'unpaid'" [class.active]="tab() === 'unpaid'" (click)="setTab('unpaid')">Impayés</button>
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'revenue'" [class.active]="tab() === 'revenue'" (click)="setTab('revenue')">Recettes</button>
+  </div>
+
+  @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+
+  @switch (tab()) {
+    @case ('invoices') {
+      <div class="split" [class.has-side]="selected() || editing()">
+        <section class="card list-card">
+          <form class="filters" (submit)="$event.preventDefault(); filter()">
+            <select class="input" [value]="status()" (change)="status.set($any($event.target).value); filter()" aria-label="Statut">
+              <option value="">Tous les statuts</option>
+              @for (s of statuses; track s) { <option [value]="s">{{ statusLabels[s] }}</option> }
+            </select>
+            <input class="input" placeholder="N° de facture (FAC-…)" [value]="number()" (input)="number.set($any($event.target).value)" aria-label="Numéro" />
+            <button type="submit" class="btn btn-outline btn-sm">Filtrer</button>
+          </form>
+
+          @if (loading()) {
+            <p class="muted">Chargement…</p>
+          } @else if (invoices().length === 0) {
+            <div class="empty"><strong>Aucune facture</strong><span>Créez une facture depuis ce bouton ou depuis la fiche d'un patient.</span></div>
+          } @else {
+            <table class="lines-table clickable">
+              <thead><tr><th>N°</th><th>Patient</th><th>Date</th><th>Statut</th><th>Part patient</th><th>Reste</th></tr></thead>
+              <tbody>
+                @for (i of invoices(); track i.id) {
+                  <tr [class.selected]="selected()?.id === i.id" (click)="open(i.id); editing.set(null)" tabindex="0" (keydown.enter)="open(i.id)">
+                    <td><strong>{{ i.number }}</strong></td>
+                    <td>{{ i.patientName }}<br /><span class="muted">{{ i.recordNumber }}</span></td>
+                    <td>{{ formatDateTime(i.issuedAt ?? i.createdAt) }}</td>
+                    <td><span class="chip" [attr.data-status]="i.status">{{ statusLabels[i.status] }}</span></td>
+                    <td class="num">{{ formatTnd(i.patientShare) }}</td>
+                    <td class="num">{{ formatTnd(i.balance) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            @if (pages() > 1) {
+              <nav class="pager" aria-label="Pagination">
+                <button type="button" class="btn btn-outline btn-sm" [disabled]="page() === 1" (click)="goTo(page() - 1)">Précédent</button>
+                <span>Page {{ page() }} / {{ pages() }}</span>
+                <button type="button" class="btn btn-outline btn-sm" [disabled]="page() === pages()" (click)="goTo(page() + 1)">Suivant</button>
+              </nav>
+            }
+          }
+        </section>
+
+        @if (editing(); as e) {
+          <section class="card side">
+            <app-invoice-editor [invoice]="e === 'new' ? null : e" [patientId]="newFor()"
+                                (saved)="saved($event)" (cancelled)="editing.set(null); newFor.set(null)" />
+          </section>
+        } @else if (selected(); as s) {
+          <section class="card side">
+            <app-invoice-detail [invoice]="s" [canManage]="true" (changed)="changed($event)" (edit)="editing.set($event)" />
+            <p class="meta"><a [routerLink]="['/patients', s.patientId]">Voir le dossier du patient</a></p>
+          </section>
+        }
+      </div>
+    }
+
+    @case ('unpaid') {
+      <section class="card list-card">
+        @if (unpaid(); as u) {
+          <p class="kpi">{{ u.count }} facture(s) à régler · <strong>{{ formatTnd(u.outstanding) }}</strong> restant dus</p>
+          @if (u.items.length === 0) {
+            <div class="empty"><strong>Aucun impayé</strong></div>
+          } @else {
+            <table class="lines-table clickable">
+              <thead><tr><th>N°</th><th>Patient</th><th>Émise le</th><th>Statut</th><th>Reste</th></tr></thead>
+              <tbody>
+                @for (i of u.items; track i.id) {
+                  <tr (click)="setTab('invoices'); open(i.id)" tabindex="0" (keydown.enter)="setTab('invoices'); open(i.id)">
+                    <td><strong>{{ i.number }}</strong></td>
+                    <td>{{ i.patientName }} <span class="muted">{{ i.recordNumber }}</span></td>
+                    <td>{{ formatDateTime(i.issuedAt) }}</td>
+                    <td><span class="chip" [attr.data-status]="i.status">{{ statusLabels[i.status] }}</span></td>
+                    <td class="num"><strong>{{ formatTnd(i.balance) }}</strong></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        } @else {
+          <p class="muted">Chargement…</p>
+        }
+      </section>
+    }
+
+    @case ('revenue') {
+      <section class="card list-card">
+        <form class="filters" (submit)="$event.preventDefault(); loadRevenue()">
+          <label class="field inline"><span>Du</span><input class="input" type="date" [value]="from()" (change)="from.set($any($event.target).value)" /></label>
+          <label class="field inline"><span>au</span><input class="input" type="date" [value]="to()" (change)="to.set($any($event.target).value)" /></label>
+          <select class="input" [value]="groupBy()" (change)="groupBy.set($any($event.target).value)" aria-label="Regroupement">
+            <option value="day">Par jour</option>
+            <option value="month">Par mois</option>
+          </select>
+          <button type="submit" class="btn btn-outline btn-sm">Afficher</button>
+        </form>
+        @if (revenue(); as r) {
+          <p class="kpi">Encaissé {{ formatTnd(r.collected) }} · remboursé {{ formatTnd(r.refunded) }} · <strong>net {{ formatTnd(r.net) }}</strong></p>
+          @if (r.rows.length === 0) {
+            <div class="empty"><strong>Aucun règlement sur la période</strong></div>
+          } @else {
+            <table class="lines-table">
+              <thead><tr><th>Période</th><th>Règlements</th>@for (m of methods; track m) { <th>{{ methodLabels[m] }}</th> }<th>Net</th><th class="bar-col"></th></tr></thead>
+              <tbody>
+                @for (row of r.rows; track row.period) {
+                  <tr>
+                    <td>{{ row.period }}</td>
+                    <td class="num">{{ row.payments }}</td>
+                    @for (m of methods; track m) { <td class="num">{{ row.byMethod[m] ? formatTnd(row.byMethod[m]!) : '—' }}</td> }
+                    <td class="num"><strong>{{ formatTnd(row.net) }}</strong></td>
+                    <td class="bar-col"><span class="bar" [style.width.%]="(row.net / maxNet()) * 100"></span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        } @else {
+          <p class="muted">Chargement…</p>
+        }
+      </section>
+    }
+  }
+</div>

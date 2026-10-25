@@ -1,0 +1,123 @@
+@let inv = invoice();
+<article class="detail" aria-labelledby="invoice-title">
+  <header class="detail-head">
+    <div>
+      <h2 id="invoice-title">Facture {{ inv.number }}</h2>
+      <p class="meta">
+        <span class="chip" [attr.data-status]="inv.status">{{ statusLabels[inv.status] }}</span>
+        {{ inv.patientName }} · {{ inv.recordNumber }}
+        @if (inv.issuedAt) { · émise le {{ formatDateTime(inv.issuedAt) }} }
+      </p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-outline btn-sm" (click)="invoicePdf()"><app-icon name="file" [size]="16" /> PDF</button>
+      @if (canManage() && inv.status === 'DRAFT') {
+        <button type="button" class="btn btn-outline btn-sm" [disabled]="busy()" (click)="edit.emit(inv)"><app-icon name="edit" [size]="16" /> Modifier</button>
+        <button type="button" class="btn btn-primary btn-sm" [disabled]="busy()" (click)="issue()">Émettre</button>
+      }
+      @if (canManage() && cancellable()) {
+        <button type="button" class="btn btn-danger btn-sm" [disabled]="busy()" (click)="openCancel()">Annuler la facture</button>
+      }
+    </div>
+  </header>
+
+  @if (error()) { <div class="alert" role="alert">{{ error() }}</div> }
+  @if (inv.status === 'CANCELLED') {
+    <p class="cancelled-note">Annulée le {{ formatDateTime(inv.cancelledAt) }} : « {{ inv.cancelReason }} »</p>
+  }
+
+  <table class="lines-table">
+    <thead><tr><th>Désignation</th><th>Qté</th><th>Prix unitaire</th><th>Montant</th></tr></thead>
+    <tbody>
+      @for (line of inv.lines; track $index) {
+        <tr><td>{{ line.label }}</td><td class="num">{{ line.quantity }}</td><td class="num">{{ formatTnd(line.unitPrice) }}</td><td class="num">{{ formatTnd(line.amount) }}</td></tr>
+      }
+    </tbody>
+  </table>
+
+  <dl class="totals">
+    <dt>Total</dt><dd>{{ formatTnd(inv.total) }}</dd>
+    <dt>Part assurance</dt><dd>{{ formatTnd(inv.insuranceShare) }}</dd>
+    <dt>Part patient</dt><dd>{{ formatTnd(inv.patientShare) }}</dd>
+    <dt>Déjà réglé</dt><dd>{{ formatTnd(inv.paidAmount) }}</dd>
+    <dt>Reste à payer</dt><dd><strong>{{ formatTnd(inv.balance) }}</strong></dd>
+  </dl>
+  @if (inv.note) { <p class="meta">{{ inv.note }}</p> }
+
+  @if (canManage() && payable()) {
+    <form class="pay" (submit)="$event.preventDefault(); pay()">
+      <h3>Enregistrer un paiement</h3>
+      <div class="row">
+        <label class="field">
+          <span>Montant (TND)</span>
+          <input class="input money" inputmode="decimal" [value]="amount()" (input)="amount.set($any($event.target).value)" />
+        </label>
+        <label class="field">
+          <span>Mode</span>
+          <select class="input" [value]="method()" (change)="method.set($any($event.target).value)">
+            @for (m of methods; track m) { <option [value]="m">{{ methodLabels[m] }}</option> }
+          </select>
+        </label>
+        <label class="field grow">
+          <span>Note</span>
+          <input class="input" maxlength="500" [value]="payNote()" (input)="payNote.set($any($event.target).value)" />
+        </label>
+      </div>
+      @if (amountValue() !== null && amountValue()! > inv.balance) {
+        <p class="hint warn">Le montant dépasse le reste à payer ({{ formatTnd(inv.balance) }}).</p>
+      }
+      <div class="actions end">
+        <button type="submit" class="btn btn-primary btn-sm"
+                [disabled]="busy() || !amountValue() || amountValue()! > inv.balance">Encaisser</button>
+      </div>
+    </form>
+  }
+
+  <h3>Règlements</h3>
+  @if (inv.payments.length === 0) {
+    <p class="muted">Aucun règlement.</p>
+  } @else {
+    <table class="lines-table">
+      <thead><tr><th>Reçu</th><th>Date</th><th>Mode</th><th>Montant</th><th></th></tr></thead>
+      <tbody>
+        @for (p of inv.payments; track p.id) {
+          <tr [class.refund]="p.amount < 0">
+            <td>{{ p.receiptNumber }} @if (p.refundOf) { <span class="muted">(remboursement)</span> }</td>
+            <td>{{ formatDateTime(p.createdAt) }}</td>
+            <td>{{ methodLabels[p.method] }}</td>
+            <td class="num">{{ formatTnd(p.amount) }}</td>
+            <td class="row-actions">
+              <button type="button" class="btn btn-outline btn-sm" (click)="receiptPdf(p)">Reçu</button>
+              @if (canManage() && p.refundable > 0) {
+                <button type="button" class="btn btn-outline btn-sm" [disabled]="busy()" (click)="openRefund(p)">Rembourser</button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <dialog #refundDialog class="small-dialog" aria-labelledby="refund-title" (cancel)="closeDialogs()">
+    <h2 id="refund-title">Rembourser le reçu {{ refunding()?.receiptNumber }}</h2>
+    <label class="field"><span>Montant (au plus {{ formatTnd(refunding()?.refundable ?? 0) }})</span>
+      <input class="input money" inputmode="decimal" [value]="refundAmount()" (input)="refundAmount.set($any($event.target).value)" /></label>
+    <label class="field"><span>Motif</span>
+      <input class="input" maxlength="500" [value]="reason()" (input)="reason.set($any($event.target).value)" /></label>
+    <div class="actions end">
+      <button type="button" class="btn btn-outline btn-sm" (click)="closeDialogs()">Annuler</button>
+      <button type="button" class="btn btn-danger btn-sm" [disabled]="!refundAmount()" (click)="refund()">Rembourser</button>
+    </div>
+  </dialog>
+
+  <dialog #cancelDialog class="small-dialog" aria-labelledby="cancel-title" (cancel)="closeDialogs()">
+    <h2 id="cancel-title">Annuler la facture {{ inv.number }}</h2>
+    <p class="muted">La facture reste dans l'historique avec ce motif.</p>
+    <label class="field"><span>Motif (obligatoire)</span>
+      <input class="input" maxlength="500" [value]="reason()" (input)="reason.set($any($event.target).value)" /></label>
+    <div class="actions end">
+      <button type="button" class="btn btn-outline btn-sm" (click)="closeDialogs()">Retour</button>
+      <button type="button" class="btn btn-danger btn-sm" [disabled]="!reason().trim()" (click)="cancel()">Annuler la facture</button>
+    </div>
+  </dialog>
+</article>

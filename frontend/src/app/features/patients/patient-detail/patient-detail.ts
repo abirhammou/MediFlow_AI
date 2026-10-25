@@ -9,6 +9,7 @@ import { PatientPermissions } from '../patient-permissions';
 import { PatientChat } from '../patient-chat/patient-chat';
 import { PatientFilesCard } from '../patient-files/patient-files';
 import { PatientHistoryCard } from '../patient-history/patient-history';
+import { PatientInvoicesCard } from '../patient-invoices/patient-invoices';
 import { PatientReportsCard } from '../patient-reports/patient-reports';
 import { PatientSummaryCard } from '../patient-summary/patient-summary';
 import { GENDER_LABELS, Patient } from '../patient.model';
@@ -23,6 +24,7 @@ import { PatientService } from '../patient.service';
     PatientHistoryCard,
     PatientReportsCard,
     PatientFilesCard,
+    PatientInvoicesCard,
     PatientChat,
   ],
   templateUrl: './patient-detail.html',
