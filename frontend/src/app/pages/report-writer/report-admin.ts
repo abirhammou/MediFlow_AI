@@ -236,6 +236,15 @@ const STATUS_COLOR: Record<ReportStatus, string> = {
             <footer class="modal-foot">
               @if (r.structured_content) {
                 <button class="btn" (click)="copy(r)">{{ copied() ? 'Copié ✓' : 'Copier le texte' }}</button>
+                <button class="btn pdf" [disabled]="exporting()" (click)="exportPdf(r)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                  {{ exporting() ? 'Export…' : 'Exporter en PDF' }}
+                </button>
               }
               @if (r.status !== 'ARCHIVED' && canArchive()) {
                 <button class="btn danger" [disabled]="archiving()" (click)="archive(r)">
@@ -268,6 +277,7 @@ export class ReportAdmin {
   readonly loading = signal(false);
   readonly opening = signal<string | null>(null);
   readonly archiving = signal(false);
+  readonly exporting = signal(false);
   readonly error = signal<string | null>(null);
   readonly selected = signal<ReportOut | null>(null);
   readonly stats = signal<ReportStats | null>(null);
@@ -444,6 +454,18 @@ export class ReportAdmin {
     navigator.clipboard.writeText(`${report.title}\n\n${report.structured_content ?? ''}`).then(() => {
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 1500);
+    });
+  }
+
+  exportPdf(report: ReportOut): void {
+    this.error.set(null);
+    this.exporting.set(true);
+    this.api.downloadPdf(report.id, report.title).subscribe({
+      next: () => this.exporting.set(false),
+      error: () => {
+        this.exporting.set(false);
+        this.error.set("Impossible d'exporter le PDF.");
+      },
     });
   }
 
