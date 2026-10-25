@@ -7,6 +7,44 @@
 }
 .module-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; flex-shrink: 0; }
 
+/* ── Role pill ── */
+.role-pill {
+  margin-left: auto; flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: .375rem;
+  padding: .3rem .875rem; border-radius: 999px;
+  background: var(--primary-50); color: var(--primary);
+  font-size: .75rem; font-weight: 700; border: 1px solid var(--primary-100);
+}
+
+/* ── Role banners ── */
+.role-banner {
+  display: flex; align-items: center; gap: .625rem;
+  padding: .75rem 1rem; border-radius: var(--radius-sm);
+  font-size: .83rem; font-weight: 500; margin-bottom: 1.25rem;
+  &.patient { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  &.doctor  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+}
+
+/* ── Detail modal danger button ── */
+.danger-btn { color: var(--danger) !important; border-color: #fecaca !important;
+  &:hover { background: #fef2f2 !important; }
+}
+
+/* ── Tabs ── */
+.tabs-bar {
+  display: flex; gap: .375rem; margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border); padding-bottom: 0;
+}
+.tab-btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .625rem 1.125rem; font-size: .85rem; font-weight: 600;
+  border: none; background: none; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+  &:hover  { color: var(--primary); }
+  &.active { color: var(--primary); border-bottom-color: var(--primary); }
+}
+
 /* ── Stats ── */
 .stats-row {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;
