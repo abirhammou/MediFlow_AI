@@ -89,3 +89,15 @@ th { background: #f8fafc; font-weight: 600; color: #475569; }
 .muted { color: #6b7280; font-size: 13px; }
 .top { margin-top: 12px; }
 .alert { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; &.error { background: #fee2e2; color: #b91c1c; } }
+
+/* --- Filtres de l'espace admin --- */
+.filters {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px;
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #475569; }
+  label.wide { min-width: 240px; flex: 1; }
+  select, input[type='date'] { padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font: inherit; font-size: 13px; }
+  .reset { align-self: flex-end; }
+}
+
+/* --- Bouton de recherche + dictée --- */
+.actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
