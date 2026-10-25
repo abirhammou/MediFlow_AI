@@ -21,7 +21,8 @@ const SUMMARY_STATUS     = [...AI_REVIEW_STATUS, "SUPERSEDED"];
 const REPORT_STATUS      = ["DRAFT", "FINAL", "ARCHIVED"];
 const TASK_STATUS        = ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"];
 const REMINDER_STATUS    = ["DRAFT", "APPROVED", "SENT", "DISCARDED"];
-const LLM_MODULES        = ["APPOINTMENT", "PATIENT_RECORD", "REPORT", "MEDDOC", "FOLLOWUP", "FAQ"];
+const LLM_MODULES        = ["APPOINTMENT", "PATIENT_RECORD", "PATIENT_HISTORY", "PATIENT_CHAT", "REPORT", "MEDDOC", "FOLLOWUP", "FAQ"];
+const HISTORY_SCOPES     = ["TIMELINE", "REPORT"];
 const BLOOD_TYPES        = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const FILE_CATEGORIES    = ["ADMINISTRATIVE", "MEDICAL"];
 const FILE_TYPES         = ["INSURANCE", "ACCOUNT", "INVOICE", "BILL", "SCAN", "LAB_RESULT", "IMAGING", "OTHER"];
@@ -231,6 +232,32 @@ const patientFiles = defineCollection(
   }
 );
 patientFiles.createIndex({ patientId: 1, category: 1, createdAt: -1 }, { name: "idx_files_patient_category" });
+
+// patient_history_summaries — AI medical summaries for doctors (whole timeline or one report),
+// same review workflow as patient_summaries: one VALIDATED per (patient, scope, report).
+const historySummaries = defineCollection(
+  "patient_history_summaries",
+  ["patientId", "scope", "content", "status", "createdAt"],
+  {
+    patientId: oid,
+    scope: oneOf(HISTORY_SCOPES),
+    reportId: { ...optOid, description: "medical_reports._id when scope = REPORT" },
+    content: str({ minLength: 1, maxLength: 6000 }),
+    status: oneOf(SUMMARY_STATUS),
+    llmModel: optStr(),
+    sourceSnapshot: { bsonType: ["object", "null"], description: "promptVersion + fingerprints of the sources" },
+    generatedBy: optOid,
+    reviewedBy: optOid,
+    reviewedAt: optDate,
+    reviewComment: optStr(),
+    createdAt: date,
+  }
+);
+historySummaries.createIndex({ patientId: 1, scope: 1, createdAt: -1 }, { name: "idx_history_patient" });
+historySummaries.createIndex(
+  { patientId: 1, scope: 1, reportId: 1 },
+  { unique: true, name: "uq_one_validated_history", partialFilterExpression: { status: "VALIDATED" } }
+);
 
 // =====================================================================
 // MODULE 1 — APPOINTMENT MANAGER AI

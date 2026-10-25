@@ -36,6 +36,7 @@ from app.modules.patient_files.models import (
     FileType,
     PatientFile,
 )
+from app.modules.patient_history.models import HistoryScope, PatientHistorySummary
 from app.modules.patients.models import (
     Address,
     BloodType,
@@ -44,6 +45,7 @@ from app.modules.patients.models import (
     Insurance,
     Patient,
     PatientSummary,
+    SummaryStatus,
 )
 from app.modules.reports.models import MedicalReport, ReportStatus
 
@@ -76,6 +78,9 @@ MINIMAL: dict[str, Callable[[], Document]] = {
         gender=Gender.MALE,
     ),
     "patient_summaries": lambda: PatientSummary(patient_id=oid(), content="Patient suivi."),
+    "patient_history_summaries": lambda: PatientHistorySummary(
+        patient_id=oid(), scope=HistoryScope.TIMELINE, content="Chronologie"
+    ),
     "patient_files": lambda: PatientFile(
         patient_id=oid(),
         category=FileCategory.ADMINISTRATIVE,
@@ -178,6 +183,19 @@ FULL: dict[str, Callable[[], Document]] = {
         reviewed_by=oid(),
         reviewed_at=START,
         review_comment="Conforme.",
+    ),
+    "patient_history_summaries": lambda: PatientHistorySummary(
+        patient_id=oid(),
+        scope=HistoryScope.REPORT,
+        report_id=oid(),
+        content="Motif\n- Bilan annuel [S1]",
+        status=SummaryStatus.VALIDATED,
+        llm_model="gemini/gemini-3.8-flash",
+        source_snapshot={"promptVersion": "v1", "sources": [{"id": "S1", "hash": "ab"}]},
+        generated_by=oid(),
+        reviewed_by=oid(),
+        reviewed_at=START,
+        review_comment=None,
     ),
     "patient_files": lambda: PatientFile(
         patient_id=oid(),
@@ -292,7 +310,7 @@ COLLECTIONS = sorted(model.Settings.name for model in DOCUMENT_MODELS)
 
 
 def test_every_collection_has_a_model_and_samples():
-    assert len(COLLECTIONS) == 15
+    assert len(COLLECTIONS) == 16
     assert sorted(MINIMAL) == sorted(FULL) == COLLECTIONS
 
 

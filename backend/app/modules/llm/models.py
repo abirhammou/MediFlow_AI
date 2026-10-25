@@ -9,6 +9,8 @@ from app.core.models import CreatedAtDocument
 class LlmModule(str, Enum):
     APPOINTMENT = "APPOINTMENT"
     PATIENT_RECORD = "PATIENT_RECORD"
+    PATIENT_HISTORY = "PATIENT_HISTORY"  # medical summaries for doctors
+    PATIENT_CHAT = "PATIENT_CHAT"  # questions on a patient record
     REPORT = "REPORT"
     MEDDOC = "MEDDOC"
     FOLLOWUP = "FOLLOWUP"
