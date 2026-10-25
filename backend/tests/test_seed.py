@@ -3,6 +3,7 @@ from collections import Counter
 from app.core.time import utcnow
 from app.modules.appointments.models import Appointment, AppointmentRequest, AppointmentStatus
 from app.modules.auth.models import Role, User
+from app.modules.billing.models import Invoice, InvoiceStatus, Payment
 from app.modules.documents.models import MedicalDocument
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder
@@ -31,6 +32,8 @@ async def counts(db) -> dict[str, int]:
         "reminders": await Reminder.count(),
         "llm_interactions": await LlmInteraction.count(),
         "patient_files": await PatientFile.count(),
+        "invoices": await Invoice.count(),
+        "payments": await Payment.count(),
     }
 
 
@@ -62,6 +65,19 @@ async def test_every_patient_has_administrative_and_medical_files(db, files_dir)
 
     assert len(categories) == len(PATIENTS) + len(DEV_PATIENTS)
     assert all(found == set(FileCategory) for found in categories.values())
+
+
+async def test_invoices_in_every_state_with_consistent_payments(db):
+    await seed("seed-test-password")
+
+    invoices = await Invoice.find_all().to_list()
+    assert {invoice.status for invoice in invoices} == set(InvoiceStatus)
+    for invoice in invoices:
+        paid = sum(p.amount for p in await Payment.find({"invoiceId": invoice.id}).to_list())
+        assert paid == invoice.paid_amount <= invoice.patient_share
+        assert invoice.total == sum(line.amount for line in invoice.lines)
+        if invoice.status == InvoiceStatus.PAID:
+            assert invoice.balance == 0
 
 
 async def test_every_patient_has_reports_in_every_state(db):

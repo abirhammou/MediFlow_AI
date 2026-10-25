@@ -39,6 +39,7 @@ from app.modules.reports.prompts import SYSTEM_PROMPT as REPORT_SYSTEM_PROMPT
 from app.modules.reports.prompts import report_prompt
 from app.modules.reports.schemas import StructuredReport
 from app.modules.reports.service import SECTIONS, render
+from scripts.seed_billing import seed_invoices
 from scripts.seed_clinical_data import APPOINTMENT_REQUESTS, BENALI, CLINICAL_HISTORY, History
 from scripts.seed_files import seed_patient_files
 
@@ -127,6 +128,9 @@ class ModuleSeeder:
             await self._documents(patient, history, visits)
             await seed_patient_files(
                 patient, history, self.users[SECRETARY], self.created, self.existing
+            )
+            await seed_invoices(
+                index, patient, visits, self.users, self.users[SECRETARY], self.created, self.existing
             )
             await self._tasks(index, patient, history, visits[-1])
         await self._appointment_requests()
