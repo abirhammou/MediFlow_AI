@@ -51,3 +51,27 @@ class TaskRepository:
     async def delete(self, task_id: str) -> bool:
         result = await self.collection.delete_one({"_id": ObjectId(task_id)})
         return result.deleted_count == 1
+
+
+class ReminderRepository:
+    def __init__(self, database: AsyncDatabase) -> None:
+        self.collection = database["followup_reminders"]
+
+    async def create(self, data: dict[str, Any]) -> dict[str, Any]:
+        result = await self.collection.insert_one(data)
+        data["_id"] = result.inserted_id
+        return data
+
+    async def list(self) -> list[dict[str, Any]]:
+        return [doc async for doc in self.collection.find().sort("created_at", -1)]
+
+    async def get(self, reminder_id: str) -> Optional[dict[str, Any]]:
+        return await self.collection.find_one({"_id": ObjectId(reminder_id)})
+
+    async def update(self, reminder_id: str, values: dict[str, Any]) -> Optional[dict[str, Any]]:
+        await self.collection.update_one({"_id": ObjectId(reminder_id)}, {"$set": values})
+        return await self.get(reminder_id)
+
+    async def delete(self, reminder_id: str) -> bool:
+        result = await self.collection.delete_one({"_id": ObjectId(reminder_id)})
+        return result.deleted_count == 1
