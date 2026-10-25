@@ -16,9 +16,11 @@ from app.modules.patients.schemas import (
     PatientUpdate,
 )
 from app.modules.patients.service import PatientService
+from app.modules.patients.summary_router import router as summary_router
 
 router = APIRouter()
 TAGS = ["patients"]
+# The AI summary uses the shared LiteLLM client (LLM_MODEL), not a PATIENTS_LLM_* provider.
 LLM_ENABLED = False
 
 # Who may do what on patient records (the frontend mirrors it to hide buttons).
@@ -122,3 +124,6 @@ async def restore_patient(
     service: PatientService = Depends(get_patient_service),
 ) -> PatientOut:
     return await service.restore_patient(patient_id, user)
+
+
+router.include_router(summary_router)

@@ -6,7 +6,6 @@ from beanie import Insert, PydanticObjectId, Replace, Save, before_event
 from pydantic import AwareDatetime, Field, field_validator
 
 from app.core.models import (
-    AiReviewStatus,
     CamelModel,
     CreatedAtDocument,
     TimestampedDocument,
@@ -92,12 +91,24 @@ class Patient(TimestampedDocument):
         name = "patients"
 
 
+class SummaryStatus(str, Enum):
+    """AiReviewStatus plus SUPERSEDED (patient_summaries only, not MedDoc)."""
+
+    DRAFT = "DRAFT"
+    VALIDATED = "VALIDATED"
+    REJECTED = "REJECTED"
+    SUPERSEDED = "SUPERSEDED"  # was VALIDATED, replaced by a newer validated summary
+
+
+SUMMARY_MAX_LENGTH = 4000
+
+
 class PatientSummary(CreatedAtDocument):
     """Every AI draft is kept; at most one VALIDATED summary per patient (unique index)."""
 
     patient_id: PydanticObjectId
-    content: str = Field(min_length=1, max_length=4000)
-    status: AiReviewStatus = AiReviewStatus.DRAFT
+    content: str = Field(min_length=1, max_length=SUMMARY_MAX_LENGTH)
+    status: SummaryStatus = SummaryStatus.DRAFT
     llm_model: str | None = None
     source_snapshot: dict[str, Any] | None = Field(
         default=None, description="patient fields sent to the LLM"

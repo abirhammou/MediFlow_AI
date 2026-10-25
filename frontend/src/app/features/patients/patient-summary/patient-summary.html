@@ -1,0 +1,156 @@
+<section class="card summary" aria-labelledby="summary-title">
+  <header class="summary-head">
+    <h2 id="summary-title"><app-icon name="zap" [size]="18" /> Résumé administratif (IA)</h2>
+    @if (perms.canGenerateSummary() && !loading() && !loadError()) {
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        [disabled]="generating() || busy()"
+        [attr.aria-busy]="generating()"
+        (click)="generate()"
+      >
+        @if (generating()) {
+          <span class="spinner" aria-hidden="true"></span> Génération en cours…
+        } @else if (draft() || current()) {
+          <app-icon name="rotate-ccw" [size]="16" /> Régénérer
+        } @else {
+          <app-icon name="zap" [size]="16" /> Générer un résumé
+        }
+      </button>
+    }
+  </header>
+
+  @if (perms.canSeeSummaryHistory() && !loading() && !loadError()) {
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" [attr.aria-selected]="tab() === 'summary'"
+              [class.active]="tab() === 'summary'" (click)="tab.set('summary')">Résumé</button>
+      <button type="button" role="tab" [attr.aria-selected]="tab() === 'history'"
+              [class.active]="tab() === 'history'" (click)="tab.set('history')">
+        Historique ({{ history().length }})
+      </button>
+    </div>
+  }
+
+  @if (actionError()) {
+    <div class="alert" role="alert">{{ actionError() }}</div>
+  }
+  @if (generating()) {
+    <p class="muted hint" role="status">L'IA rédige le résumé, cela peut prendre quelques secondes…</p>
+  }
+
+  @if (loading()) {
+    <p class="muted" aria-busy="true">Chargement du résumé…</p>
+  } @else if (loadError()) {
+    <div class="alert" role="alert">{{ loadError() }}</div>
+  } @else if (tab() === 'summary') {
+    @if (draft(); as d) {
+      <div class="draft">
+        <label class="draft-label" for="summary-draft">
+          <app-icon name="alert" [size]="16" /> Brouillon généré par IA — à vérifier avant validation
+        </label>
+        <textarea
+          id="summary-draft"
+          class="input"
+          rows="12"
+          maxlength="4000"
+          [readOnly]="!perms.canReviewSummary()"
+          [value]="draftText()"
+          (input)="draftText.set($any($event.target).value)"
+        ></textarea>
+        <p class="meta">
+          Généré le {{ formatDateTime(d.createdAt) }}
+          @if (d.generatedByName) { par {{ d.generatedByName }} }
+          · Modèle : {{ d.llmModel || '—' }} · {{ draftText().length }}/4000
+        </p>
+        @if (d.isOutdated) {
+          <p class="outdated" role="status"><app-icon name="alert" [size]="16" /> Le dossier a changé depuis ce brouillon. Régénérez-le avant de le valider.</p>
+        }
+        @if (perms.canReviewSummary()) {
+          <div class="actions">
+            <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() || generating() || !draftText().trim()" (click)="validate(d)">
+              Valider
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" [disabled]="busy() || generating() || !dirty() || !draftText().trim()" (click)="save(d)">
+              Enregistrer le brouillon
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" [disabled]="busy() || generating()" (click)="openReject()">
+              Rejeter
+            </button>
+          </div>
+        } @else {
+          <p class="muted hint">La validation est réservée aux médecins.</p>
+        }
+      </div>
+
+      <dialog #rejectDialog class="reject-dialog" aria-labelledby="reject-title" (cancel)="closeReject()">
+        <h2 id="reject-title">Rejeter le brouillon</h2>
+        <p class="muted">Indiquez pourquoi ce résumé n'est pas utilisable. Le commentaire est conservé dans l'historique.</p>
+        <label class="field">
+          <span>Commentaire</span>
+          <textarea class="input" rows="4" maxlength="1000" [value]="rejectComment()"
+                    (input)="rejectComment.set($any($event.target).value)"></textarea>
+        </label>
+        <div class="actions end">
+          <button type="button" class="btn btn-outline btn-sm" (click)="closeReject()">Annuler</button>
+          <button type="button" class="btn btn-danger btn-sm" [disabled]="!rejectComment().trim()" (click)="reject(d)">
+            Rejeter
+          </button>
+        </div>
+      </dialog>
+    }
+
+    @if (current(); as c) {
+      @if (draft()) {
+        <h3 class="sub">Résumé validé en vigueur</h3>
+      }
+      <div class="validated">
+        <p class="badge validated-badge">
+          <app-icon name="shield" [size]="14" />
+          Validé
+          @if (c.reviewedByName) { par Dr {{ c.reviewedByName }} }
+          @if (c.reviewedAt) { le {{ formatDateTime(c.reviewedAt) }} }
+        </p>
+        @if (c.isOutdated) {
+          <p class="outdated" role="status"><app-icon name="alert" [size]="16" /> Le dossier a changé depuis ce résumé</p>
+        }
+        <p class="content">{{ c.content }}</p>
+        <p class="meta">Modèle : {{ c.llmModel || '—' }} · généré le {{ formatDateTime(c.createdAt) }}</p>
+      </div>
+    } @else if (!draft()) {
+      <div class="empty">
+        <strong>Aucun résumé validé</strong>
+        @if (perms.canGenerateSummary()) {
+          <span>Générez un brouillon : il devra être relu et validé par un médecin.</span>
+        } @else {
+          <span>Un médecin n'a pas encore validé de résumé pour ce dossier.</span>
+        }
+      </div>
+    }
+  } @else {
+    @if (history().length === 0) {
+      <div class="empty"><strong>Aucune version</strong><span>Aucun résumé n'a encore été généré.</span></div>
+    } @else {
+      <ol class="history">
+        @for (s of history(); track s.id) {
+          <li>
+            <div class="history-head">
+              <span class="chip" [attr.data-status]="s.status">{{ statusLabels[s.status] }}</span>
+              <span>{{ formatDateTime(s.createdAt) }}</span>
+              @if (s.generatedByName) { <span class="muted">· généré par {{ s.generatedByName }}</span> }
+              @if (s.reviewedByName) {
+                <span class="muted">· relu par Dr {{ s.reviewedByName }}@if (s.reviewedAt) { le {{ formatDateTime(s.reviewedAt) }} }</span>
+              }
+            </div>
+            @if (s.reviewComment) {
+              <p class="comment">« {{ s.reviewComment }} »</p>
+            }
+            <details>
+              <summary>Voir le texte · {{ s.llmModel || '—' }}</summary>
+              <p class="content">{{ s.content }}</p>
+            </details>
+          </li>
+        }
+      </ol>
+    }
+  }
+</section>
