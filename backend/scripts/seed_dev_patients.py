@@ -517,7 +517,7 @@ def _exact(value: str) -> str:
     return f"^{re.escape(value)}$"
 
 
-async def _find_existing(spec: dict[str, Any]) -> Patient | None:
+async def find_existing(spec: dict[str, Any]) -> Patient | None:
     if spec.get("national_id"):
         return await Patient.find_one(Eq(Patient.national_id, spec["national_id"]))
     return await Patient.find_one(
@@ -534,7 +534,7 @@ async def seed_dev_patients(created_by: PydanticObjectId | None = None) -> tuple
     """
     created = existing = 0
     for spec in DEV_PATIENTS:
-        if await _find_existing(spec) is not None:
+        if await find_existing(spec) is not None:
             existing += 1
             continue
         await Patient(
@@ -561,7 +561,7 @@ async def sync_notes(
     changed = 0
     for spec in specs:
         notes = spec.get("administrative_notes")
-        patient = await _find_existing(spec)
+        patient = await find_existing(spec)
         if not notes or patient is None or patient.administrative_notes == notes:
             continue
         if patient.administrative_notes and not reset:

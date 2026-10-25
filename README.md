@@ -50,6 +50,20 @@ cd backend
 cd ..
 ```
 
+Le seed remplit aussi chaque module, avec des données fictives cohérentes avec l'histoire de chacun des 20 patients (`backend/scripts/seed_clinical_data.py`) :
+
+| Module | Données |
+|---|---|
+| Rendez-vous | 3 consultations passées (`COMPLETED`) par patient et un prochain rendez-vous ; demandes en texte libre (`appointment_requests`) |
+| ReportWriter | 3 comptes rendus par patient, chacun lié à sa consultation : `FINAL`, `ARCHIVED`, `DRAFT` (avec contenu à finaliser, ou notes brutes seules pour essayer « Générer ») |
+| Dossiers patients | Résumés IA : validé (avec parfois un ancien `SUPERSEDED`), brouillon à relire, rejeté ; quelques patients sans résumé pour tester la génération |
+| MedDoc | 2 à 3 documents par patient, catégorie validée ou seulement suggérée par l'IA |
+| Suivi | Tâches de suivi et rappels des prochains rendez-vous confirmés |
+| FAQ | Entrées approuvées et en attente de validation |
+| Journal LLM | `llm_interactions` liées aux comptes rendus, résumés, documents et rappels (au moins un jour d'ancienneté : les quotas horaires restent libres) |
+
+Sur une base existante, relancer d'abord `mongo-init.js` (voir [Base de données](#base-de-données)) pour mettre à jour les validateurs, puis le seed : seules les données manquantes sont ajoutées.
+
 **2. API (terminal 1)**
 
 ```powershell

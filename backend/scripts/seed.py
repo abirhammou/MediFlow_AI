@@ -1,11 +1,14 @@
-"""Demo data for development: one account per role, patients, appointments and FAQ entries.
+"""Demo data for development: one account per role, patients, appointments, FAQ entries
+and, through scripts.seed_modules, the data of every module (medical reports, AI summaries,
+documents, follow-up tasks and reminders, appointment requests, LLM call log).
 
 Run from backend/:  .\\.venv\\Scripts\\python -m scripts.seed
 
 Works on whichever MongoDB `MONGODB_URI` points to (Docker or local); the schema must
 already exist (database/mongo-init.js). Idempotent: every record is looked up by a natural
 key (email, nationalId, appointment reason, FAQ question) and only inserted when missing,
-so running it again never duplicates anything and never resets a changed password.
+so running it again never duplicates anything and never resets a changed password
+(see scripts.seed_modules for the keys of the module data).
 Appointment dates are relative to the day of the first run. All data is fictitious.
 Existing patients get the seed's administrative notes when theirs are empty;
 `--reset-notes` also replaces notes that differ (see scripts.seed_dev_patients).
@@ -37,7 +40,14 @@ from app.modules.patients.models import (
     Patient,
 )
 from app.security import hash_password
-from scripts.seed_dev_patients import DEV_PATIENTS, argument_parser, seed_dev_patients, sync_notes
+from scripts.seed_dev_patients import (
+    DEV_PATIENTS,
+    argument_parser,
+    find_existing,
+    seed_dev_patients,
+    sync_notes,
+)
+from scripts.seed_modules import patient_key, seed_modules
 
 DEFAULT_PASSWORD = "MediFlow2026!"
 # Tunisia: UTC+1 all year. Appointment times below are local clinic times.
@@ -271,7 +281,8 @@ APPOINTMENTS: list[tuple[str, str, int, time, AppointmentStatus, str]] = [
 ]
 APPOINTMENT_MINUTES = 30
 
-FAQ: list[tuple[str, str, str]] = [
+# (category, question, answer[, approved]): approved unless False; the assistant only uses approved entries.
+FAQ: list[tuple[str, str, str] | tuple[str, str, str, bool]] = [
     (
         "Horaires",
         "Quels sont les horaires d'ouverture du cabinet ?",
@@ -301,6 +312,28 @@ FAQ: list[tuple[str, str, str]] = [
         "Urgences",
         "Que faire en cas d'urgence ?",
         "Le cabinet ne prend pas en charge les urgences. Appelez le SAMU au 190 ou rendez-vous aux urgences les plus proches.",
+    ),
+    (
+        "Comptes rendus",
+        "Comment obtenir le compte rendu de ma consultation ?",
+        "Une fois validé par votre médecin, le compte rendu est disponible dans votre espace patient et peut être téléchargé en PDF.",
+    ),
+    (
+        "Résultats",
+        "Une autre personne peut-elle récupérer mes résultats ?",
+        "Oui, avec une autorisation écrite signée par vous et une pièce d'identité de la personne qui les récupère.",
+    ),
+    (
+        "Paiement",
+        "Peut-on payer par carte bancaire ?",
+        "Le cabinet accepte les espèces et la carte bancaire. Une facture détaillée est remise sur demande.",
+        False,
+    ),
+    (
+        "Certificats",
+        "Le cabinet délivre-t-il des certificats pour le sport ?",
+        "Oui, après une consultation. Pensez à apporter le formulaire de votre club s'il en a un.",
+        False,
     ),
 ]
 
@@ -345,7 +378,9 @@ async def seed(password: str = DEFAULT_PASSWORD, *, reset_notes: bool = False) -
     admin = users["admin@mediflow.local"]
 
     patients = {spec["national_id"]: await _ensure_patient(spec, admin.id, report) for spec in PATIENTS}
-    await _ensure_user(PATIENT_ACCOUNT, password_hash, report, patient_id=patients["DEMO-0001"].id)
+    users[PATIENT_ACCOUNT["email"]] = await _ensure_user(
+        PATIENT_ACCOUNT, password_hash, report, patient_id=patients["DEMO-0001"].id
+    )
     created, existing = await seed_dev_patients(admin.id)
     report.created["patients"] += created
     report.existing["patients"] += existing
@@ -375,22 +410,45 @@ async def seed(password: str = DEFAULT_PASSWORD, *, reset_notes: bool = False) -
         ).insert()
         report.created["appointments"] += 1
 
-    for category, question, answer in FAQ:
+    for category, question, answer, *approved in FAQ:
         if await FaqEntry.find_one(Eq(FaqEntry.question, question)) is not None:
             report.existing["faq_entries"] += 1
             continue
         await FaqEntry(
-            question=question, answer=answer, category=category, is_approved=True, created_by=admin.id
+            question=question,
+            answer=answer,
+            category=category,
+            is_approved=approved[0] if approved else True,
+            created_by=admin.id,
         ).insert()
         report.created["faq_entries"] += 1
 
+    all_patients = {patient_key(spec): await find_existing(spec) for spec in [*PATIENTS, *DEV_PATIENTS]}
+    await seed_modules(users, all_patients, report.created, report.existing)
     return report
 
 
+KINDS = (
+    "users",
+    "patients",
+    "appointments",
+    "medical_reports",
+    "patient_summaries",
+    "document_categories",
+    "medical_documents",
+    "appointment_requests",
+    "followup_tasks",
+    "followup_reminders",
+    "reminders",
+    "faq_entries",
+    "llm_interactions",
+)
+
+
 def _print_report(report: SeedReport, password: str) -> None:
-    for kind in ("users", "patients", "appointments", "faq_entries"):
-        print(f"  {kind:<13} {report.created[kind]:>2} créé(s), {report.existing[kind]:>2} déjà présent(s)")
-    print(f"  {'notes':<13} {report.notes_updated:>2} mise(s) à jour")
+    for kind in KINDS:
+        print(f"  {kind:<20} {report.created[kind]:>3} créé(s), {report.existing[kind]:>3} déjà présent(s)")
+    print(f"  {'notes':<20} {report.notes_updated:>3} mise(s) à jour")
     print("\nComptes de démonstration (mot de passe identique pour tous) :")
     for spec in [*ACCOUNTS, PATIENT_ACCOUNT]:
         state = "" if spec.get("is_active", True) else "  (inactif : à approuver)"
