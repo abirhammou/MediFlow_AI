@@ -8,7 +8,7 @@ from bson.errors import InvalidId
 from app.errors import APIError
 from app.llm.service import generate_json
 from app.modules.follow_up.prompts import SYSTEM_PROMPT, reminder_prompt
-from app.modules.follow_up.repository import TaskRepository
+from app.modules.follow_up.repository import API_STATUS, TaskRepository, as_date
 from app.modules.follow_up.schemas import (
     ReminderDraft,
     ReminderRequest,
@@ -24,11 +24,11 @@ def _serialize(document: dict) -> TaskOut:
     return TaskOut(
         id=str(document["_id"]),
         description=document["description"],
-        due_date=document["due_date"],
-        status=TaskStatus(document["status"]),
-        patient_name=document["patient_name"],
-        appointment_date=document["appointment_date"],
-        appointment_reason=document["appointment_reason"],
+        due_date=as_date(document["dueDate"]),
+        status=API_STATUS[document["status"]],
+        patient_name=document.get("patientName") or "",
+        appointment_date=as_date(document["appointmentDate"]),
+        appointment_reason=document.get("appointmentReason") or "",
     )
 
 
@@ -43,7 +43,7 @@ class TaskService:
 
     async def list(self, status: Optional[TaskStatus] = None) -> list[TaskOut]:
         if status is not None:
-            docs = await self.repository.list_by_status(status.value)
+            docs = await self.repository.list_by_status(status)
         else:
             docs = await self.repository.list()
         return [_serialize(doc) for doc in docs]

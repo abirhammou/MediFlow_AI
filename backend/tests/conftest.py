@@ -203,6 +203,8 @@ async def db(
     for model in DOCUMENT_MODELS:
         name = model.Settings.name
         await database[name].delete_many({"_id": {"$nin": reference_ids.get(name, [])}})
+    # Written without a Beanie model by the follow-up module.
+    await database["followup_reminders"].delete_many({})
 
 
 # ---------------------------------------------------------------------

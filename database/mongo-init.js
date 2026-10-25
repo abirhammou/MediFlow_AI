@@ -327,6 +327,9 @@ const tasks = defineCollection(
     description: str({ maxLength: 2000 }),
     dueDate: optDate,
     status: oneOf(TASK_STATUS),
+    patientName: optStr({ maxLength: 200, description: "as typed in the follow-up form" }),
+    appointmentDate: optDate,
+    appointmentReason: optStr({ maxLength: 500 }),
     createdBy: optOid,
     ...timestamps,
   }
