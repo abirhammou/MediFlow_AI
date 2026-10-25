@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, forkJoin, map } from 'rxjs';
 
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW';
 
@@ -33,9 +33,14 @@ export interface AppointmentPage {
 export interface AppointmentQuery {
   status?: AppointmentStatus | '';
   patient_id?: string;
+  doctor_id?: string;
+  date_from?: string; // ISO 8601
+  date_to?: string; // ISO 8601, exclu
   page: number;
   page_size: number;
 }
+
+export type StatusCounts = Record<AppointmentStatus, number>;
 
 export interface AppointmentCreate {
   patient_id: string;
@@ -68,7 +73,25 @@ export class AppointmentsApi {
     let params = new HttpParams().set('page', q.page).set('page_size', q.page_size);
     if (q.status) params = params.set('status', q.status);
     if (q.patient_id?.trim()) params = params.set('patient_id', q.patient_id.trim());
+    if (q.doctor_id?.trim()) params = params.set('doctor_id', q.doctor_id.trim());
+    if (q.date_from) params = params.set('date_from', q.date_from);
+    if (q.date_to) params = params.set('date_to', q.date_to);
     return this.http.get<AppointmentPage>(this.base, { params });
+  }
+
+  /** Pas d'endpoint de statistiques : on lit le `total` d'une page d'un seul élément par statut. */
+  counts(): Observable<StatusCounts> {
+    const statuses = Object.keys(STATUS_LABELS) as AppointmentStatus[];
+    const one = (status: AppointmentStatus) =>
+      this.list({ status, page: 1, page_size: 1 }).pipe(map(p => p.total));
+    return forkJoin(statuses.map(one)).pipe(
+      map(totals => Object.fromEntries(statuses.map((s, i) => [s, totals[i]])) as StatusCounts),
+    );
+  }
+
+  /** Rendez-vous d'une période (100 maximum), pour le graphique par jour. */
+  window(date_from: string, date_to: string): Observable<Appointment[]> {
+    return this.list({ date_from, date_to, page: 1, page_size: 100 }).pipe(map(p => p.items));
   }
 
   create(body: AppointmentCreate): Observable<Appointment> {

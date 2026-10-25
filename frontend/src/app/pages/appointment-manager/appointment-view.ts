@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { forkJoin } from 'rxjs';
 import { AuthService, apiErrorMessage } from '../../core/auth/auth.service';
 import { ConfirmService } from '../../shared/confirm-dialog/confirm.service';
 import { Icon } from '../../shared/icon/icon';
@@ -8,6 +9,26 @@ import { ToastService } from '../../shared/toast/toast.service';
 import {
   Appointment, AppointmentStatus, AppointmentsApi, ParseResult, STATUS_LABELS, Slot,
 } from './appointments.api';
+import { AppointmentStats, StatsData } from './appointment-stats';
+import { PatientPicker } from './patient-picker';
+import { VoiceButton } from './voice-button';
+
+interface PatientOption {
+  id: string;
+}
+
+interface DoctorOption {
+  id: string;
+  name: string;
+}
+
+const CLINIC_TZ = 'Africa/Tunis';
+const DAY_MS = 24 * 3600 * 1000;
+
+/** Jour (YYYY-MM-DD) d'une date, à l'heure de la clinique. */
+function clinicDay(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: CLINIC_TZ });
+}
 
 export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
 
@@ -20,7 +41,7 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
  */
 @Component({
   selector: 'app-appointment-view',
-  imports: [Icon, FormsModule, DatePipe],
+  imports: [Icon, FormsModule, DatePipe, AppointmentStats, PatientPicker, VoiceButton],
   styleUrl: './appointment-manager.scss',
   template: `
     <div class="module-page">
@@ -37,14 +58,17 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
           <h2>Demander un rendez-vous</h2>
           <p class="muted">Écrivez votre demande comme vous la diriez : « Je voudrais voir un cardiologue mardi matin ».</p>
           @if (mode() === 'secretary') {
-            <label class="f"><span>ID du patient</span>
-              <input type="text" [(ngModel)]="patientId" placeholder="24 caractères (ObjectId)" /></label>
+            <div class="f"><span>Patient</span>
+              <app-patient-picker [allowCreate]="true" (picked)="onPatientPicked($event)" /></div>
           }
           <label class="f"><span>Demande</span>
-            <textarea rows="3" [(ngModel)]="message" maxlength="2000" placeholder="Ex. Rendez-vous demain après-midi pour un contrôle"></textarea></label>
-          <button type="button" class="btn primary" [disabled]="searching() || !message.trim()" (click)="search()">
-            ✨ {{ searching() ? 'Recherche…' : 'Trouver des créneaux' }}
-          </button>
+            <textarea rows="3" [ngModel]="message()" (ngModelChange)="message.set($event)" maxlength="2000" placeholder="Ex. Rendez-vous demain après-midi pour un contrôle"></textarea></label>
+          <div class="actions-row">
+            <button type="button" class="btn primary" [disabled]="searching() || !message().trim()" (click)="search()">
+              ✨ {{ searching() ? 'Recherche…' : 'Trouver des créneaux' }}
+            </button>
+            <app-voice-button (text)="message.set($event)" />
+          </div>
 
           @if (result(); as r) {
             <p class="muted top">
@@ -69,6 +93,10 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
         </section>
       }
 
+      @if (mode() === 'admin') {
+        <app-appointment-stats [stats]="stats()" />
+      }
+
       <section class="card">
         <div class="head">
           <h2>{{ mode() === 'patient' ? 'Mes rendez-vous' : mode() === 'doctor' ? 'Mon agenda' : 'Rendez-vous' }}</h2>
@@ -77,6 +105,25 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
             @for (s of statuses; track s) { <option [value]="s">{{ label(s) }}</option> }
           </select>
         </div>
+
+        @if (mode() === 'admin') {
+          <div class="filters">
+            <label><span>Médecin</span>
+              <select [(ngModel)]="doctorFilter" (ngModelChange)="reload(1)">
+                <option value="">Tous les médecins</option>
+                @for (d of doctors(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+              </select>
+            </label>
+            <label class="wide"><span>Patient</span>
+              <app-patient-picker #filterPicker (picked)="onPatientFilter($event)" />
+            </label>
+            <label><span>Du</span><input type="date" [(ngModel)]="dateFrom" (ngModelChange)="reload(1)" /></label>
+            <label><span>Au</span><input type="date" [(ngModel)]="dateTo" (ngModelChange)="reload(1)" /></label>
+            @if (hasFilters()) {
+              <button type="button" class="btn sm reset" (click)="resetFilters(filterPicker)">Réinitialiser</button>
+            }
+          </div>
+        }
 
         @if (error()) { <div class="alert error">{{ error() }}</div> }
 
@@ -97,8 +144,8 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
                 @for (a of items(); track a.id) {
                   <tr>
                     <td>{{ a.start_at | date: 'dd/MM/yyyy HH:mm' }}</td>
-                    @if (mode() !== 'patient') { <td class="mono">{{ a.patient_id }}</td> }
-                    @if (mode() !== 'doctor') { <td class="mono">{{ a.doctor_id }}</td> }
+                    @if (mode() !== 'patient') { <td>{{ a.patient_id }}</td> }
+                    @if (mode() !== 'doctor') { <td>{{ a.doctor_id }}</td> }
                     <td>{{ a.reason || '—' }}</td>
                     <td><span class="badge" [attr.data-status]="a.status">{{ label(a.status) }}</span></td>
                     <td class="right">
@@ -155,9 +202,15 @@ export class AppointmentView implements OnInit {
   readonly searching = signal(false);
   readonly booking = signal(false);
   readonly result = signal<ParseResult | null>(null);
+  readonly stats = signal<StatsData | null>(null);
+  readonly doctors = signal<DoctorOption[]>([]);
 
   statusFilter: AppointmentStatus | '' = '';
-  message = '';
+  doctorFilter = '';
+  patientFilter = '';
+  dateFrom = '';
+  dateTo = '';
+  readonly message = signal('');
   patientId = '';
 
   readonly canBook = computed(() => this.mode() === 'patient' || this.mode() === 'secretary');
@@ -175,7 +228,52 @@ export class AppointmentView implements OnInit {
       this.mode.set(userRole as ViewMode);
       this.cdr.detectChanges(); // Force la mise à jour de la vue
     }
+    if (this.mode() === 'admin') {
+      this.refreshStats();
+    }
     this.reload(1);
+  }
+
+  hasFilters(): boolean {
+    return !!(this.doctorFilter || this.patientFilter || this.dateFrom || this.dateTo);
+  }
+
+  resetFilters(picker: PatientPicker): void {
+    this.doctorFilter = '';
+    this.patientFilter = '';
+    this.dateFrom = '';
+    this.dateTo = '';
+    picker.clear(); // émet « aucun patient » et recharge la liste
+  }
+
+  onPatientFilter(patient: PatientOption | null): void {
+    this.patientFilter = patient?.id ?? '';
+    this.reload(1);
+  }
+
+  onPatientPicked(patient: PatientOption | null): void {
+    this.patientId = patient?.id ?? '';
+    this.result.set(null);
+  }
+
+  /** Chiffres par statut + rendez-vous des 14 jours autour d'aujourd'hui. */
+  private refreshStats(): void {
+    const today = clinicDay(new Date());
+    const base = new Date(`${today}T00:00:00+01:00`).getTime();
+    const from = new Date(base - 6 * DAY_MS);
+    const to = new Date(base + 8 * DAY_MS);
+    forkJoin({ counts: this.api.counts(), items: this.api.window(from.toISOString(), to.toISOString()) }).subscribe({
+      next: ({ counts, items }) => {
+        const perDay = Array.from({ length: 14 }, (_, i) => {
+          const date = new Date(from.getTime() + i * DAY_MS);
+          const day = clinicDay(date);
+          const count = items.filter(a => a.status !== 'CANCELLED' && clinicDay(new Date(a.start_at)) === day).length;
+          return { day, label: day.slice(8), count, today: day === today };
+        });
+        this.stats.set({ counts, perDay });
+      },
+      error: () => this.stats.set(null),
+    });
   }
 
   label(s: AppointmentStatus): string {
@@ -189,7 +287,15 @@ export class AppointmentView implements OnInit {
   reload(page: number): void {
     this.loading.set(true);
     this.error.set('');
-    this.api.list({ status: this.statusFilter, page, page_size: this.SIZE }).subscribe({
+    this.api.list({
+      status: this.statusFilter,
+      patient_id: this.patientFilter,
+      doctor_id: this.doctorFilter,
+      date_from: this.dateFrom ? new Date(`${this.dateFrom}T00:00:00+01:00`).toISOString() : undefined,
+      date_to: this.dateTo ? new Date(new Date(`${this.dateTo}T00:00:00+01:00`).getTime() + DAY_MS).toISOString() : undefined,
+      page,
+      page_size: this.SIZE,
+    }).subscribe({
       next: p => {
         this.items.set(p.items);
         this.total.set(p.total);
@@ -210,7 +316,7 @@ export class AppointmentView implements OnInit {
     }
     this.searching.set(true);
     this.result.set(null);
-    this.api.parseRequest(this.message.trim(), this.patientId.trim()).subscribe({
+    this.api.parseRequest(this.message().trim(), this.patientId.trim()).subscribe({
       next: r => {
         this.result.set(r);
         this.searching.set(false);
@@ -241,7 +347,7 @@ export class AppointmentView implements OnInit {
         this.toast.show('Rendez-vous créé.');
         this.booking.set(false);
         this.result.set(null);
-        this.message = '';
+        this.message.set('');
         this.reload(1);
       },
       error: e => {
@@ -257,6 +363,7 @@ export class AppointmentView implements OnInit {
       next: () => {
         this.toast.show('Statut mis à jour.');
         this.reload(this.page());
+        if (this.mode() === 'admin') this.refreshStats();
       },
       error: e => this.toast.show(apiErrorMessage(e), 'error'),
     });
@@ -275,6 +382,7 @@ export class AppointmentView implements OnInit {
       next: () => {
         this.toast.show('Rendez-vous annulé.');
         this.reload(this.page());
+        if (this.mode() === 'admin') this.refreshStats();
       },
       error: e => this.toast.show(apiErrorMessage(e), 'error'),
     });

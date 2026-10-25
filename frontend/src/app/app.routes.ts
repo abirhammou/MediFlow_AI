@@ -46,6 +46,7 @@ export const routes: Routes = [
       },
       {
         path: 'report-writer',
+    
         title: 'ReportWriter AI · MediFlow AI',
         loadComponent: () => import('./pages/report-writer/report-writer').then(m => m.ReportWriter),
       },
