@@ -29,7 +29,20 @@ class LLMRateLimitError(APIError):
 
 class LLMResponseError(APIError):
     def __init__(self) -> None:
-        super().__init__(502, "llm_invalid_response", "Le fournisseur LLM a renvoyé une réponse invalide.")
+        super().__init__(
+            502, "llm_invalid_response", "Le fournisseur LLM a renvoyé une réponse invalide."
+        )
+
+
+class LlmUnavailableError(APIError):
+    """Every configured model failed (timeout, quota, provider error, missing key)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            503,
+            "llm_unavailable",
+            "Le service IA est momentanément indisponible, réessayez plus tard",
+        )
 
 
 def register_error_handlers(app: FastAPI) -> None:
