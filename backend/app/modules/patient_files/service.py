@@ -4,6 +4,7 @@ A PATIENT only reaches their own record (`owns_patient_record`); the categories 
 role may not read are filtered out of every list and refused (403) on direct access.
 """
 
+import asyncio
 import re
 import unicodedata
 
@@ -17,6 +18,7 @@ from app.errors import APIError
 from app.modules.auth.models import Role, User
 from app.modules.auth.repository import get_user_names
 from app.modules.patient_files import storage
+from app.modules.patient_files.extraction import extract_text
 from app.modules.patient_files.models import FileCategory, FileType, PatientFile
 from app.modules.patient_files.schemas import PatientFileOut
 from app.modules.patients import repository as patients
@@ -159,6 +161,12 @@ class PatientFileService:
             )
 
         stored = await storage.save(str(pid), data, mime)
+        # Only MEDICAL files feed the AI: administrative papers are never read.
+        text, extraction = (
+            await asyncio.to_thread(extract_text, data, mime)
+            if category == FileCategory.MEDICAL
+            else (None, None)
+        )
         file = PatientFile(
             patient_id=pid,
             category=category,
@@ -169,6 +177,8 @@ class PatientFileService:
             mime=mime,
             size=stored.size,
             sha256=stored.sha256,
+            extracted_text=text,
+            extraction_status=extraction,
             uploaded_by=user.id,
         )
         await file.insert()

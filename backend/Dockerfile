@@ -3,9 +3,11 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# Dépendances système minimales
+# Dépendances système minimales ; Tesseract (+ français) pour l'OCR des documents scannés
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    tesseract-ocr \
+    tesseract-ocr-fra \
     && rm -rf /var/lib/apt/lists/*
 
 # Copier et installer les dépendances Python

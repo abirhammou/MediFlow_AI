@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 
 from app.modules.auth.models import User
 from app.modules.patient_files import storage
+from app.modules.patient_files.extraction import extract_text
 from app.modules.patient_files.models import FileCategory, FileMime, FileType, PatientFile
 from app.modules.patients.models import Patient
 from scripts.seed_clinical_data import History
@@ -110,6 +111,9 @@ async def seed_patient_files(
             continue
         data = build_pdf(title, lines)
         stored = await storage.save(str(patient.id), data, FileMime.PDF)
+        text, extraction = (
+            extract_text(data, FileMime.PDF) if category == FileCategory.MEDICAL else (None, None)
+        )
         await PatientFile(
             patient_id=patient.id,
             category=category,
@@ -120,6 +124,8 @@ async def seed_patient_files(
             mime=FileMime.PDF,
             size=stored.size,
             sha256=stored.sha256,
+            extracted_text=text,
+            extraction_status=extraction,
             uploaded_by=uploader.id,
         ).insert()
         created["patient_files"] += 1

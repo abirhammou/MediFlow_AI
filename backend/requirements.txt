@@ -48,6 +48,7 @@ multidict==7.2.0
 openai==2.54.0
 opentelemetry-api==1.45.1
 packaging==26.3
+pillow==13.0.0
 pluggy==1.7.0
 propcache==0.5.4
 pydantic_core==2.50.1
@@ -56,6 +57,8 @@ pydantic==2.14.1
 pydantic-settings==2.16.1
 Pygments==2.21.0
 pymongo==4.19.0
+pypdf==6.21.2
+pytesseract==0.3.13
 pytest==9.1.1
 pytest-asyncio==1.4.0
 python-dateutil==2.9.0.post0
