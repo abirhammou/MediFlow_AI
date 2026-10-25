@@ -103,7 +103,7 @@ def create_report(api_client, auth):
 
 # ── Droits ────────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("role", [Role.PATIENT, Role.ADMIN_STAFF])
+@pytest.mark.parametrize("role", [Role.ADMIN_STAFF])
 async def test_other_roles_cannot_use_reports(api_client, user_factory, auth, role):
     user = await user_factory(email=f"{role.value.lower()}@example.test", role=role)
 
@@ -146,7 +146,7 @@ async def test_secretary_only_sees_finalized_reports(
     assert [item["title"] for item in listing.json()["items"]] == ["Final"]
     assert hidden.status_code == 404
 
-@pytest.mark.parametrize("role", [Role.ADMIN_STAFF])
+
 async def test_patient_sees_only_own_finalized_reports(
     api_client, user_factory, doctor, secretary, auth, create_report, fake_llm
 ):
@@ -177,6 +177,7 @@ async def test_patient_sees_only_own_finalized_reports(
     assert foreign.status_code == 404 and hidden_draft.status_code == 404
     assert write.status_code == 403
     assert as_secretary.json()["raw_notes"] == ""
+
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
