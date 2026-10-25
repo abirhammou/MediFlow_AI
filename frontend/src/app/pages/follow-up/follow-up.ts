@@ -5,12 +5,21 @@ import { Icon } from '../../shared/icon/icon';
 import { AuthService, Role } from '../../core/auth/auth.service';
 import { Reminders } from './reminders/reminders';
 
+interface PatientOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  recordNumber: string;
+}
+
 export interface Task {
   id: string;
   description: string;
   due_date: string;
   status: 'pending' | 'done' | 'cancelled';
+  patient_id: string;
   patient_name: string;
+  patient_record_number: string;
   appointment_date: string;
   appointment_reason: string;
 }
@@ -111,12 +120,10 @@ export class FollowUp {
   reminderResult  = signal<ReminderDraft | null>(null);
   reminderLoading = signal(false);
   reminderError   = signal<string | null>(null);
-
-  // ── Forms ─────────────────────────────────────────────────────────────────
   createForm = this.fb.nonNullable.group({
     description:        ['', [Validators.required, Validators.maxLength(1000)]],
     due_date:           ['', Validators.required],
-    patient_name:       ['', [Validators.required, Validators.maxLength(200)]],
+    patient_id:         ['', Validators.required],
     appointment_date:   ['', Validators.required],
     appointment_reason: ['', [Validators.required, Validators.maxLength(500)]],
   });
@@ -132,6 +139,26 @@ export class FollowUp {
     appointment_date:   ['', Validators.required],
     appointment_reason: ['', Validators.required],
   });
+
+  // ── Patient select — chargement de tous les patients ──────────────────────
+  allPatients     = signal<PatientOption[]>([]);
+  patientsLoading = signal(false);
+  selectedPatient = signal<PatientOption | null>(null);
+
+  loadPatients() {
+    if (this.allPatients().length > 0) return; // déjà chargé
+    this.patientsLoading.set(true);
+    this.http.get<{ items: PatientOption[] }>('/api/patients?size=100&page=1').subscribe({
+      next: res => { this.allPatients.set(res.items); this.patientsLoading.set(false); },
+      error: ()  => this.patientsLoading.set(false),
+    });
+  }
+
+  onPatientChange(id: string) {
+    const p = this.allPatients().find(x => x.id === id) ?? null;
+    this.selectedPatient.set(p);
+    this.createForm.patchValue({ patient_id: id });
+  }
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
   activeTab = signal<'tasks' | 'reminders'>('tasks');
@@ -166,6 +193,8 @@ export class FollowUp {
   openCreate() {
     if (!this.perms().canCreate) return;
     this.createForm.reset();
+    this.selectedPatient.set(null);
+    this.loadPatients();
     this.showCreateModal.set(true);
   }
 

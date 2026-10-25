@@ -12,11 +12,7 @@ class TaskRepository:
     def __init__(self, database: AsyncDatabase) -> None:
         self.collection = database["followup_tasks"]
 
-    async def create(self, task: TaskCreate) -> dict[str, Any]:
-        document = task.model_dump()
-        document["due_date"] = document["due_date"].isoformat()
-        document["appointment_date"] = document["appointment_date"].isoformat()
-        document["status"] = TaskStatus.pending.value
+    async def create(self, document: dict) -> dict[str, Any]:
         result = await self.collection.insert_one(document)
         document["_id"] = result.inserted_id
         return document
@@ -26,6 +22,9 @@ class TaskRepository:
 
     async def list_by_status(self, status: str) -> list[dict[str, Any]]:
         return [doc async for doc in self.collection.find({"status": status}).sort("due_date", 1)]
+
+    async def list_by_patient(self, patient_id: str) -> list[dict[str, Any]]:
+        return [doc async for doc in self.collection.find({"patient_id": patient_id}).sort("due_date", 1)]
 
     async def stats(self) -> dict[str, int]:
         total     = await self.collection.count_documents({})
