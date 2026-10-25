@@ -39,7 +39,7 @@ async def test_llm_status_never_exposes_key(client):
 
     assert response.status_code == 200
     assert response.json()["template"] == {"provider": "mock", "key_configured": False}
-    assert set(response.json()) == {"documents", "follow_up", "template"}
+    assert set(response.json()) == {"documents", "follow_up", "reports", "template"}
     assert "api_key" not in response.text
 
 
@@ -89,8 +89,20 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/patients/{patient_id}/summaries/{summary_id}/validate",
         "/api/patients/{patient_id}/summaries/{summary_id}/reject",
         "/api/follow-up/tasks",
+        "/api/follow-up/tasks/stats",
         "/api/follow-up/tasks/{task_id}",
+        "/api/follow-up/reminders",
         "/api/follow-up/reminders/generate",
+        "/api/follow-up/reminders/{reminder_id}",
+        "/api/follow-up/reminders/{reminder_id}/export/pdf",
+        "/api/follow-up/reminders/{reminder_id}/export/docx",
+        "/api/follow-up/reminders/{reminder_id}/export/email",
+        "/api/reports",
+        "/api/reports/{report_id}",
+        "/api/reports/{report_id}/generate",
+        "/api/reports/{report_id}/finalize",
+        "/api/reports/{report_id}/archive",
+        "/api/reports/{report_id}/pdf",
     }
 
 
