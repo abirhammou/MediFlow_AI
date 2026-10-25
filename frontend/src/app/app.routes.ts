@@ -34,11 +34,11 @@ export const routes: Routes = [
         title: 'Tableau de bord · MediFlow AI',
         loadComponent: () => import('./pages/dashboard/dashboard').then(m => m.Dashboard),
       },
-      {
+         {
         path: 'appointment-manager',
         title: 'Appointment Manager AI · MediFlow AI',
-        loadComponent: () => import('./pages/appointment-manager/appointment-manager').then(m => m.AppointmentManager),
-      },
+        loadComponent: () => import('./pages/appointment-manager/appointment-view').then(m => m.AppointmentView),
+      },  
       {
         path: 'patients',
         canActivate: [roleGuard(PATIENT_ROLES.read)],
@@ -46,6 +46,7 @@ export const routes: Routes = [
       },
       {
         path: 'report-writer',
+    
         title: 'ReportWriter AI · MediFlow AI',
         loadComponent: () => import('./pages/report-writer/report-writer').then(m => m.ReportWriter),
       },
