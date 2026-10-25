@@ -118,18 +118,70 @@ async def test_only_doctors_can_create(api_client, admin, secretary, auth):
         assert response.status_code == 403
 
 
-async def test_doctor_sees_only_own_reports(api_client, doctor, other_doctor, admin, auth, create_report):
+async def test_doctor_reads_colleague_reports_of_a_patient(
+    api_client, doctor, other_doctor, admin, auth, create_report
+):
     report = await create_report(doctor)
+    url = f"/api/reports/{report['id']}"
 
-    own = await api_client.get(f"/api/reports/{report['id']}", headers=auth(doctor))
+    own = await api_client.get(url, headers=auth(doctor))
+    foreign = await api_client.get(url, headers=auth(other_doctor))
+    as_admin = await api_client.get(url, headers=auth(admin))
+    in_patient_file = await api_client.get(
+        "/api/reports", headers=auth(other_doctor), params={"patient_id": report["patient_id"]}
+    )
+    my_reports = await api_client.get("/api/reports", headers=auth(other_doctor))
+
+    assert own.status_code == 200 and own.json()["is_mine"] is True
+    assert own.json()["doctor_name"] == "Test User"
+    assert foreign.status_code == 200
+    assert foreign.json()["is_mine"] is False and foreign.json()["raw_notes"] == NOTES
+    assert as_admin.status_code == 200 and as_admin.json()["is_mine"] is False
+    [item] = in_patient_file.json()["items"]
+    assert item["id"] == report["id"] and item["is_mine"] is False
+    assert item["doctor_name"] == "Test User"
+    assert my_reports.json()["total"] == 0  # « Mes comptes rendus » : les siens uniquement
+
+
+async def test_only_the_author_changes_a_report(
+    api_client, doctor, other_doctor, auth, create_report, fake_llm
+):
+    report = await create_report(doctor)
+    url = f"/api/reports/{report['id']}"
+    colleague = auth(other_doctor)
+
+    responses = [
+        await api_client.patch(url, headers=colleague, json={"title": "Autre"}),
+        await api_client.post(f"{url}/generate", headers=colleague),
+        await api_client.post(f"{url}/finalize", headers=colleague),
+        await api_client.post(f"{url}/archive", headers=colleague),
+    ]
+
+    assert [r.status_code for r in responses] == [403, 403, 403, 403]
+    assert {r.json()["code"] for r in responses} == {"not_report_author"}
+    assert fake_llm.calls == []
+    unchanged = await api_client.get(url, headers=auth(doctor))
+    assert unchanged.json()["title"] == report["title"]
+    assert unchanged.json()["status"] == "DRAFT"
+
+
+async def test_colleague_archived_reports_stay_hidden(
+    api_client, doctor, other_doctor, auth, create_report
+):
+    report = await create_report(doctor)
+    await api_client.post(f"/api/reports/{report['id']}/archive", headers=auth(doctor))
+
     foreign = await api_client.get(f"/api/reports/{report['id']}", headers=auth(other_doctor))
-    as_admin = await api_client.get(f"/api/reports/{report['id']}", headers=auth(admin))
-    other_list = await api_client.get("/api/reports", headers=auth(other_doctor))
+    archived = await api_client.get(
+        "/api/reports",
+        headers=auth(other_doctor),
+        params={"patient_id": report["patient_id"], "status": "ARCHIVED"},
+    )
+    own = await api_client.get(f"/api/reports/{report['id']}", headers=auth(doctor))
 
-    assert own.status_code == 200
     assert foreign.status_code == 404
-    assert as_admin.status_code == 200
-    assert other_list.json()["total"] == 0
+    assert archived.json()["total"] == 0
+    assert own.status_code == 200
 
 
 async def test_secretary_only_sees_finalized_reports(

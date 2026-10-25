@@ -7,6 +7,7 @@ from app.core.time import utcnow
 from app.errors import APIError
 from app.llm.service import generate_json
 from app.modules.auth.models import Role, User
+from app.modules.auth.repository import get_user_names
 from app.modules.reports.guardrails import check_content
 from app.modules.reports.models import MedicalReport, ReportStatus
 from app.modules.reports.pdf import build_pdf
@@ -49,7 +50,13 @@ def _not_found() -> APIError:
     return APIError(404, "report_not_found", "Compte rendu introuvable.")
 
 
-def _to_out(report: MedicalReport, *, redact: bool = False) -> ReportOut:
+def _to_out(
+    report: MedicalReport,
+    user: User,
+    names: dict[PydanticObjectId, str],
+    *,
+    redact: bool = False,
+) -> ReportOut:
     """`redact=True` : version pour la secrétaire et le patient, sans notes brutes ni avertissements."""
     warnings = (
         check_content(report.raw_notes, report.structured_content)
@@ -60,6 +67,8 @@ def _to_out(report: MedicalReport, *, redact: bool = False) -> ReportOut:
         id=str(report.id),
         patient_id=str(report.patient_id),
         doctor_id=str(report.doctor_id),
+        doctor_name=names.get(report.doctor_id),
+        is_mine=report.doctor_id == user.id,
         appointment_id=str(report.appointment_id) if report.appointment_id else None,
         title=report.title,
         raw_notes="" if redact else report.raw_notes,
@@ -72,11 +81,15 @@ def _to_out(report: MedicalReport, *, redact: bool = False) -> ReportOut:
     )
 
 
-def _to_item(report: MedicalReport) -> ReportListItem:
+def _to_item(
+    report: MedicalReport, user: User, names: dict[PydanticObjectId, str]
+) -> ReportListItem:
     return ReportListItem(
         id=str(report.id),
         patient_id=str(report.patient_id),
         doctor_id=str(report.doctor_id),
+        doctor_name=names.get(report.doctor_id),
+        is_mine=report.doctor_id == user.id,
         appointment_id=str(report.appointment_id) if report.appointment_id else None,
         title=report.title,
         status=report.status,
@@ -92,7 +105,8 @@ class ReportService:
         self.repository = repository or ReportRepository()
 
     # ── Droits ────────────────────────────────────────────────────────────────
-    # Médecin : ses comptes rendus. Admin : lecture de tous + archivage.
+    # Médecin : lecture des comptes rendus non archivés de tous les médecins (et de ses
+    # propres archivés) ; seul l'auteur les modifie. Admin : lecture de tous + archivage.
     # Secrétaire : lecture des comptes rendus finalisés uniquement.
     # Patient : lecture de ses propres comptes rendus finalisés uniquement.
 
@@ -101,7 +115,7 @@ class ReportService:
         if user.role == Role.ADMIN:
             return True
         if user.role == Role.DOCTOR:
-            return report.doctor_id == user.id
+            return report.doctor_id == user.id or report.status != ReportStatus.ARCHIVED
         if user.role == Role.SECRETARY:
             return report.status == ReportStatus.FINAL
         if user.role == Role.PATIENT:
@@ -134,6 +148,11 @@ class ReportService:
         return report
 
     @staticmethod
+    async def _out(user: User, report: MedicalReport) -> ReportOut:
+        names = await get_user_names({report.doctor_id})
+        return _to_out(report, user, names, redact=user.role in READ_ONLY_FINAL_ROLES)
+
+    @staticmethod
     def _ensure_draft(report: MedicalReport) -> None:
         if report.status == ReportStatus.FINAL:
             raise APIError(409, "report_locked", "Un compte rendu finalisé ne peut plus être modifié.")
@@ -152,7 +171,7 @@ class ReportService:
             title=data.title,
             raw_notes=data.raw_notes,
         )
-        return _to_out(await self.repository.create(report))
+        return await self._out(user, await self.repository.create(report))
 
     async def list(
         self,
@@ -180,21 +199,31 @@ class ReportService:
             except (InvalidId, TypeError):
                 raise APIError(422, "invalid_patient_id", "Identifiant patient invalide.") from None
 
+        # Médecin : tous les auteurs dans le dossier d'un patient ; sinon (« Mes comptes
+        # rendus ») et pour les archivés, seulement les siens.
+        own_only = user.role == Role.DOCTOR and (
+            patient_oid is None or ReportStatus.ARCHIVED in statuses
+        )
         items, total = [], 0
         if statuses:
             items, total = await self.repository.search(
                 statuses=statuses,
-                doctor_id=user.id if user.role == Role.DOCTOR else None,
+                doctor_id=user.id if own_only else None,
                 patient_id=patient_oid,
                 text=text,
                 page=page,
                 size=size,
             )
-        return ReportPage(items=[_to_item(r) for r in items], total=total, page=page, size=size)
+        names = await get_user_names({report.doctor_id for report in items})
+        return ReportPage(
+            items=[_to_item(report, user, names) for report in items],
+            total=total,
+            page=page,
+            size=size,
+        )
 
     async def get(self, user: User, report_id: str) -> ReportOut:
-        report = await self._load(user, report_id)
-        return _to_out(report, redact=user.role in READ_ONLY_FINAL_ROLES)
+        return await self._out(user, await self._load(user, report_id))
 
     async def update(self, user: User, report_id: str, data: ReportUpdate) -> ReportOut:
         report = await self._load(user, report_id, author_only=True)
@@ -205,7 +234,7 @@ class ReportService:
             setattr(report, field, value)
         if notes_changed and "structured_content" not in changes:
             report.structured_content = None  # le contenu généré ne correspond plus aux notes
-        return _to_out(await self.repository.save(report))
+        return await self._out(user, await self.repository.save(report))
 
     async def archive(self, user: User, report_id: str) -> ReportOut:
         report = await self._load(user, report_id, author_only=True, allow_admin=True)
@@ -213,7 +242,7 @@ class ReportService:
             raise APIError(409, "already_archived", "Ce compte rendu est déjà archivé.")
         report.status = ReportStatus.ARCHIVED
         report.archived_at = utcnow()
-        return _to_out(await self.repository.save(report))
+        return await self._out(user, await self.repository.save(report))
 
     # ── Export ────────────────────────────────────────────────────────────────
 
@@ -242,7 +271,7 @@ class ReportService:
             output_schema=StructuredReport,
         )
         report.structured_content = render(structured)
-        return _to_out(await self.repository.save(report))
+        return await self._out(user, await self.repository.save(report))
 
     async def finalize(
         self, user: User, report_id: str, data: FinalizeRequest | None = None
@@ -260,4 +289,4 @@ class ReportService:
                 "Vérifiez-les puis confirmez avec confirm_warnings=true.",
             )
         report.status = ReportStatus.FINAL
-        return _to_out(await self.repository.save(report))
+        return await self._out(user, await self.repository.save(report))

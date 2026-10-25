@@ -38,6 +38,8 @@ class ReportOut(BaseModel):
     id: str
     patient_id: str
     doctor_id: str
+    doctor_name: str | None = Field(default=None, description="« Prénom Nom » du médecin auteur")
+    is_mine: bool = Field(default=False, description="Le compte rendu a été rédigé par l'utilisateur connecté")
     appointment_id: str | None
     title: str
     raw_notes: str
@@ -58,6 +60,8 @@ class ReportListItem(BaseModel):
     id: str
     patient_id: str
     doctor_id: str
+    doctor_name: str | None = None
+    is_mine: bool = False
     appointment_id: str | None
     title: str
     status: ReportStatus
