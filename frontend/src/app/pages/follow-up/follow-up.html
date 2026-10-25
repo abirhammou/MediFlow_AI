@@ -17,17 +17,45 @@
 
   <!-- ── Tabs ──────────────────────────────────────────────────────────────── -->
   <div class="tabs-bar">
+    <!-- Onglets principaux -->
     <button class="tab-btn" [class.active]="activeTab() === 'tasks'" (click)="activeTab.set('tasks')">
       <app-icon name="bell" [size]="15" /> Tâches de suivi
     </button>
     <button class="tab-btn" [class.active]="activeTab() === 'reminders'" (click)="activeTab.set('reminders')">
       <app-icon name="zap" [size]="15" /> Rappels IA
     </button>
+    <!-- Séparateur -->
+    <span class="tabs-separator"></span>
+    <!-- 6 fonctionnalités IA -->
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'summary'" (click)="activeTab.set('summary')">
+      🧠 Résumé patient
+    </button>
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'noshow'" (click)="activeTab.set('noshow')">
+      🔮 No-show
+    </button>
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'schedule'" (click)="activeTab.set('schedule')">
+      📅 Planification
+    </button>
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'adaptive'" (click)="activeTab.set('adaptive')">
+      💬 Ton adaptatif
+    </button>
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'lost'" (click)="activeTab.set('lost')">
+      🔁 Perdus de vue
+    </button>
+    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'weekly'" (click)="activeTab.set('weekly')">
+      📊 Rapport
+    </button>
   </div>
 
   <!-- ── Tab : Rappels IA ──────────────────────────────────────────────────── -->
   @if (activeTab() === 'reminders') {
     <app-reminders />
+  }
+
+  <!-- ── Tabs IA Avancée ───────────────────────────────────────────────────── -->
+  @if (activeTab() === 'summary' || activeTab() === 'noshow' || activeTab() === 'schedule' ||
+       activeTab() === 'adaptive' || activeTab() === 'lost' || activeTab() === 'weekly') {
+    <app-ai-features [activeFeature]="activeTab()" />
   }
 
   <!-- ── Tab : Tâches ─────────────────────────────────────────────────────── -->
@@ -141,7 +169,7 @@
 
   } <!-- end tab tasks -->
 
-</div> <!-- end module-page -->
+</div><!-- end module-page -->
 
 <!-- ── Modal : créer une tâche (ADMIN, ADMIN_STAFF, SECRETARY) ──────────────── -->
 @if (showCreateModal() && perms().canCreate) {
