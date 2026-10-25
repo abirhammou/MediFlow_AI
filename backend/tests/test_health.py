@@ -44,11 +44,10 @@ async def test_llm_status_never_exposes_key(client):
 
 
 @pytest.mark.asyncio
-async def test_documents_module_returns_typed_501(client):
+async def test_documents_module_requires_authentication(client):
     response = await client.get("/api/documents/")
 
-    assert response.status_code == 501
-    assert response.json()["code"] == "not_implemented"
+    assert response.status_code == 401
 
 
 def test_openapi_contains_only_discovered_module_routes():
@@ -59,7 +58,11 @@ def test_openapi_contains_only_discovered_module_routes():
     assert "/api/llm/status" in paths
     assert set(paths) == {
         "/api/health",
+        "/api/documents",
         "/api/documents/",
+        "/api/documents/{document_id}",
+        "/api/documents/{document_id}/extract",
+        "/api/documents/{document_id}/review",
         "/api/notes/",
         "/api/notes/summarize",
         "/api/notes/{note_id}",
