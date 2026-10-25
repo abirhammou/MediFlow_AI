@@ -1,0 +1,115 @@
+<section class="card reports" aria-labelledby="reports-title">
+  <header class="reports-head">
+    <h2 id="reports-title"><app-icon name="file-text" [size]="18" /> Comptes rendus</h2>
+    @if (!loading() && !error() && total() > 0) {
+      <span class="muted count">{{ total() }} compte(s) rendu(s)</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <p class="muted" aria-busy="true">Chargement des comptes rendus…</p>
+  } @else if (error()) {
+    <div class="alert" role="alert">{{ error() }}</div>
+  } @else if (reports().length === 0) {
+    <div class="empty">
+      <strong>Aucun compte rendu</strong>
+      @if (perms.canWriteReports()) {
+        <span>Rédigez-en un depuis ReportWriter AI.</span>
+      } @else {
+        <span>Aucun compte rendu finalisé pour ce dossier.</span>
+      }
+    </div>
+  } @else {
+    <ul class="report-list">
+      @for (r of reports(); track r.id) {
+        <li>
+          <div class="report-main">
+            <div class="report-title">
+              <span class="chip" [attr.data-status]="r.status">{{ statusLabels[r.status] }}</span>
+              <strong>{{ r.title }}</strong>
+              @if (r.is_mine) { <span class="mine">Vous</span> }
+            </div>
+            <p class="meta">
+              {{ r.doctor_name ? 'Dr ' + r.doctor_name : 'Médecin inconnu' }}
+              · mis à jour le {{ formatDateTime(r.updated_at) }}
+            </p>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-outline btn-sm" (click)="open(r)">
+              <app-icon name="eye" [size]="16" /> Ouvrir
+            </button>
+            @if (r.has_structured_content) {
+              <button type="button" class="btn btn-outline btn-sm" [disabled]="exporting() === r.id"
+                      [attr.aria-busy]="exporting() === r.id" (click)="downloadPdf(r)">
+                <app-icon name="file" [size]="16" /> PDF
+              </button>
+            }
+            @if (perms.canEditReport(r)) {
+              <a class="btn btn-primary btn-sm" routerLink="/report-writer" [queryParams]="{ report: r.id }">
+                <app-icon name="edit" [size]="16" /> Modifier / finaliser
+              </a>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+    @if (total() > reports().length) {
+      <p class="muted meta">Les {{ reports().length }} plus récents sont affichés.</p>
+    }
+  }
+
+  <dialog #viewer class="viewer" aria-labelledby="viewer-title" (cancel)="close()">
+    @if (opened(); as o) {
+      <header class="viewer-head">
+        <div>
+          <h2 id="viewer-title">{{ o.title }}</h2>
+          <p class="meta">
+            <span class="chip" [attr.data-status]="o.status">{{ statusLabels[o.status] }}</span>
+            {{ o.doctor_name ? 'Dr ' + o.doctor_name : '' }} · {{ formatDateTime(o.updated_at) }}
+          </p>
+        </div>
+        <button type="button" class="icon-btn" aria-label="Fermer" (click)="close()"><app-icon name="x" [size]="18" /></button>
+      </header>
+
+      @if (!o.is_mine && o.status === 'DRAFT') {
+        <p class="readonly-note"><app-icon name="eye" [size]="16" /> Brouillon d'un confrère, en lecture seule.</p>
+      }
+
+      @if (sections().length) {
+        @for (s of sections(); track $index) {
+          <h3>{{ s.title }}</h3>
+          <p class="content">{{ s.body }}</p>
+        }
+      } @else {
+        <p class="muted">Le compte rendu n'a pas encore été structuré.</p>
+      }
+
+      @if (o.raw_notes) {
+        <details>
+          <summary>Notes brutes du médecin</summary>
+          <p class="content notes">{{ o.raw_notes }}</p>
+        </details>
+      }
+      @if (o.warnings.length) {
+        <div class="warnings" role="note">
+          <strong>Valeurs absentes des notes :</strong>
+          <ul>@for (w of o.warnings; track $index) { <li>{{ w }}</li> }</ul>
+        </div>
+      }
+
+      <div class="actions end">
+        @if (o.structured_content) {
+          <button type="button" class="btn btn-outline btn-sm" [disabled]="exporting() === o.id" (click)="downloadPdf(o)">
+            <app-icon name="file" [size]="16" /> PDF
+          </button>
+        }
+        @if (perms.canEditReport(o)) {
+          <a class="btn btn-primary btn-sm" routerLink="/report-writer" [queryParams]="{ report: o.id }" (click)="close()">
+            <app-icon name="edit" [size]="16" /> Modifier / finaliser
+          </a>
+        }
+        <button type="button" class="btn btn-outline btn-sm" (click)="close()">Fermer</button>
+      </div>
+    }
+  </dialog>
+</section>

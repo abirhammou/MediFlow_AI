@@ -1,5 +1,6 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { AuthService, Role } from '../../core/auth/auth.service';
+import { ReportListItem } from '../../pages/report-writer/reports.api';
 
 /** Same matrix as PATIENT_ROLES in backend/app/modules/patients/router.py. */
 export const PATIENT_ROLES = {
@@ -15,6 +16,20 @@ export const SUMMARY_ROLES = {
   current: ['SECRETARY', 'DOCTOR', 'ADMIN'],
   review: ['DOCTOR'],
 } as const satisfies Record<string, readonly Role[]>;
+
+/** Same matrix as backend/app/modules/reports/router.py (PATIENT reads in its own portal). */
+export const REPORT_ROLES = {
+  read: ['SECRETARY', 'DOCTOR', 'ADMIN'],
+  write: ['DOCTOR'],
+} as const satisfies Record<string, readonly Role[]>;
+
+/** Only the author edits or finalizes a report, and only while it is a DRAFT (reports/service.py). */
+export function canEditReport(
+  role: Role | undefined,
+  report: Pick<ReportListItem, 'is_mine' | 'status'>,
+): boolean {
+  return role === 'DOCTOR' && report.is_mine && report.status === 'DRAFT';
+}
 
 /** Hides the actions a role cannot use; the API enforces them anyway. */
 @Injectable({ providedIn: 'root' })
@@ -33,4 +48,10 @@ export class PatientPermissions {
   readonly canGenerateSummary = this.has(SUMMARY_ROLES.generate);
   readonly canSeeSummaryHistory = this.has(SUMMARY_ROLES.history);
   readonly canReviewSummary = this.has(SUMMARY_ROLES.review);
+  readonly canReadReports = this.has(REPORT_ROLES.read);
+  readonly canWriteReports = this.has(REPORT_ROLES.write);
+
+  canEditReport(report: Pick<ReportListItem, 'is_mine' | 'status'>): boolean {
+    return canEditReport(this.auth.user()?.role, report);
+  }
 }

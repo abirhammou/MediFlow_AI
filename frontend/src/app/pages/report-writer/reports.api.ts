@@ -8,6 +8,10 @@ export interface ReportListItem {
   id: string;
   patient_id: string;
   doctor_id: string;
+  /** « Prénom Nom » du médecin auteur. */
+  doctor_name: string | null;
+  /** Rédigé par l'utilisateur connecté : lui seul peut le modifier ou le finaliser. */
+  is_mine: boolean;
   appointment_id: string | null;
   title: string;
   status: ReportStatus;

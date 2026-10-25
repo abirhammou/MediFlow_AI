@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Observable, of, switchMap, throwError } from 'rxjs';
 import { apiErrorMessage } from '../../core/auth/auth.service';
 import { Icon } from '../../shared/icon/icon';
@@ -306,6 +307,9 @@ export class ReportDoctor {
   constructor() {
     this.refresh();
     this.api.patients().subscribe((p) => this.patients.set(p));
+    // Lien « Modifier / finaliser » de la fiche patient : /report-writer?report=<id>
+    const reportId = inject(ActivatedRoute).snapshot.queryParamMap.get('report');
+    if (reportId) this.openById(reportId);
   }
 
   icon(i: number): string {

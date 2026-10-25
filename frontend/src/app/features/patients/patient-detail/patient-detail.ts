@@ -6,13 +6,14 @@ import { Icon } from '../../../shared/icon/icon';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { ageLabel, formatBirthDate, formatDateTime } from '../birth-date';
 import { PatientPermissions } from '../patient-permissions';
+import { PatientReportsCard } from '../patient-reports/patient-reports';
 import { PatientSummaryCard } from '../patient-summary/patient-summary';
 import { GENDER_LABELS, Patient } from '../patient.model';
 import { PatientService } from '../patient.service';
 
 @Component({
   selector: 'app-patient-detail',
-  imports: [RouterLink, Icon, PatientSummaryCard],
+  imports: [RouterLink, Icon, PatientSummaryCard, PatientReportsCard],
   templateUrl: './patient-detail.html',
   styleUrl: './patient-detail.scss',
 })

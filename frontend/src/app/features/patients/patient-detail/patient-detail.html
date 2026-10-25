@@ -23,6 +23,10 @@
 
   <app-patient-summary [patientId]="p.id" />
 
+  @if (perms.canReadReports()) {
+    <app-patient-reports [patientId]="p.id" />
+  }
+
   <div class="cards">
     <section class="card info">
       <h2>Identité</h2>
