@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = Field(default=60, gt=0)
     # Password of the accounts created by scripts/seed.py (empty: dev default)
     seed_password: str | None = None
+    # Patient files (app/modules/patient_files/storage.py): never served statically.
+    files_dir: Path = BACKEND_ROOT / "var" / "files"
+    max_upload_mb: int = Field(default=10, gt=0, le=100)
 
     def validate_runtime_configuration(self) -> None:
         secret = self.jwt_secret.strip()

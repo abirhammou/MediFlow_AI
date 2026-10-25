@@ -78,6 +78,14 @@ class FakeLLM:
 
 
 @pytest.fixture(autouse=True)
+def files_dir(tmp_path, monkeypatch) -> Path:
+    """Patient files go to a temporary folder, never to backend/var/files."""
+    path = tmp_path / "files"
+    monkeypatch.setattr(settings, "files_dir", path)
+    return path
+
+
+@pytest.fixture(autouse=True)
 def no_real_llm_calls(monkeypatch):
     """Any test reaching LiteLLM without `fake_llm` fails instead of calling the network."""
 

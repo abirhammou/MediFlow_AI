@@ -23,6 +23,9 @@ const TASK_STATUS        = ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"];
 const REMINDER_STATUS    = ["DRAFT", "APPROVED", "SENT", "DISCARDED"];
 const LLM_MODULES        = ["APPOINTMENT", "PATIENT_RECORD", "REPORT", "MEDDOC", "FOLLOWUP", "FAQ"];
 const BLOOD_TYPES        = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const FILE_CATEGORIES    = ["ADMINISTRATIVE", "MEDICAL"];
+const FILE_TYPES         = ["INSURANCE", "ACCOUNT", "INVOICE", "BILL", "SCAN", "LAB_RESULT", "IMAGING", "OTHER"];
+const EXTRACTION_STATUS  = ["DONE", "EMPTY", "FAILED", "UNAVAILABLE"];
 
 // Small helpers to keep validators readable
 const str      = (extra = {}) => ({ bsonType: "string", ...extra });
@@ -204,6 +207,30 @@ summaries.createIndex(
   { patientId: 1 },
   { unique: true, name: "uq_one_validated_summary", partialFilterExpression: { status: "VALIDATED" } }
 );
+
+// patient_files — scans, lab results, insurance papers... stored on disk (storagePath),
+// soft-deleted only. ADMINISTRATIVE files never reach doctors nor the LLM.
+const patientFiles = defineCollection(
+  "patient_files",
+  ["patientId", "category", "type", "title", "originalName", "storagePath", "mime", "size", "sha256", "createdAt", "updatedAt"],
+  {
+    patientId: oid,
+    category: oneOf(FILE_CATEGORIES),
+    type: oneOf(FILE_TYPES),
+    title: str({ minLength: 1, maxLength: 200 }),
+    originalName: str({ maxLength: 255 }),
+    storagePath: str({ maxLength: 500, description: "relative to FILES_DIR, never sent to clients" }),
+    mime: oneOf(["application/pdf", "image/png", "image/jpeg"]),
+    size: { bsonType: ["int", "long"], minimum: 0 },
+    sha256: str({ pattern: "^[0-9a-f]{64}$" }),
+    extractedText: optStr({ maxLength: 50000, description: "PDF text or OCR, MEDICAL files feed the AI" }),
+    extractionStatus: optOneOf(EXTRACTION_STATUS),
+    uploadedBy: optOid,
+    deletedAt: { ...optDate, description: "soft delete" },
+    ...timestamps,
+  }
+);
+patientFiles.createIndex({ patientId: 1, category: 1, createdAt: -1 }, { name: "idx_files_patient_category" });
 
 // =====================================================================
 // MODULE 1 — APPOINTMENT MANAGER AI

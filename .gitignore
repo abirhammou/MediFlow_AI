@@ -4,3 +4,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 node_modules/
+
+# Patient files stored by the API (FILES_DIR)
+backend/var/

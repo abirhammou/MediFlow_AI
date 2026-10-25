@@ -29,6 +29,13 @@ from app.modules.documents.models import DocumentCategory, ExtractedField, Medic
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder, ReminderStatus, TaskStatus
 from app.modules.llm.models import LlmInteraction, LlmModule
+from app.modules.patient_files.models import (
+    ExtractionStatus,
+    FileCategory,
+    FileMime,
+    FileType,
+    PatientFile,
+)
 from app.modules.patients.models import (
     Address,
     BloodType,
@@ -69,6 +76,17 @@ MINIMAL: dict[str, Callable[[], Document]] = {
         gender=Gender.MALE,
     ),
     "patient_summaries": lambda: PatientSummary(patient_id=oid(), content="Patient suivi."),
+    "patient_files": lambda: PatientFile(
+        patient_id=oid(),
+        category=FileCategory.ADMINISTRATIVE,
+        file_type=FileType.INSURANCE,
+        title="Attestation CNAM",
+        original_name="attestation.pdf",
+        storage_path="0123/abc.pdf",
+        mime=FileMime.PDF,
+        size=1024,
+        sha256="0" * 64,
+    ),
     "appointments": lambda: Appointment(
         patient_id=oid(), doctor_id=oid(), start_at=START, end_at=START + timedelta(minutes=30)
     ),
@@ -160,6 +178,21 @@ FULL: dict[str, Callable[[], Document]] = {
         reviewed_by=oid(),
         reviewed_at=START,
         review_comment="Conforme.",
+    ),
+    "patient_files": lambda: PatientFile(
+        patient_id=oid(),
+        category=FileCategory.MEDICAL,
+        file_type=FileType.LAB_RESULT,
+        title="Bilan sanguin",
+        original_name="bilan.png",
+        storage_path="0123/def.png",
+        mime=FileMime.PNG,
+        size=52_000,
+        sha256="a" * 64,
+        extracted_text="Glycémie à jeun : 1,05 g/L",
+        extraction_status=ExtractionStatus.DONE,
+        uploaded_by=oid(),
+        deleted_at=START,
     ),
     "appointments": lambda: Appointment(
         patient_id=oid(),
@@ -259,7 +292,7 @@ COLLECTIONS = sorted(model.Settings.name for model in DOCUMENT_MODELS)
 
 
 def test_every_collection_has_a_model_and_samples():
-    assert len(COLLECTIONS) == 14
+    assert len(COLLECTIONS) == 15
     assert sorted(MINIMAL) == sorted(FULL) == COLLECTIONS
 
 
