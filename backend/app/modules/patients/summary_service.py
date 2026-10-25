@@ -10,7 +10,6 @@ from datetime import timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
-from beanie.operators import In
 from bson.errors import InvalidId
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
@@ -21,6 +20,7 @@ from app.llm.anonymizer import anonymize
 from app.llm.client import complete
 from app.llm.interactions import count_interactions
 from app.modules.auth.models import User
+from app.modules.auth.repository import get_user_names
 from app.modules.llm.models import LlmModule
 from app.modules.patients import repository
 from app.modules.patients.dates import age_on, clinic_today, from_mongo_date
@@ -92,13 +92,6 @@ def is_outdated(summary: PatientSummary, current: dict[str, Any]) -> bool:
     return snapshot.get("patient") != current
 
 
-async def _names(user_ids: set[PydanticObjectId]) -> dict[PydanticObjectId, str]:
-    if not user_ids:
-        return {}
-    users = await User.find(In(User.id, list(user_ids))).to_list()
-    return {user.id: f"{user.first_name} {user.last_name}" for user in users if user.id}
-
-
 def _str_or_none(value: object | None) -> str | None:
     return None if value is None else str(value)
 
@@ -122,7 +115,7 @@ class SummaryService:
 
     async def _out(self, patient: Patient, summaries: list[PatientSummary]) -> list[SummaryOut]:
         current = build_source_snapshot(patient)
-        names = await _names(
+        names = await get_user_names(
             {
                 user_id
                 for summary in summaries
