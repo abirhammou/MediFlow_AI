@@ -7,8 +7,10 @@ from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+from app.errors import APIError
 from app.modules.auth.models import Role, User
 from app.modules.auth.repository import get_user_by_id
+from app.modules.patient_portal.accounts import needs_password_change
 from app.security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -46,6 +48,14 @@ def require_roles(*roles: Role) -> Callable[..., Any]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Rôle non autorisé.",
+            )
+        # Temporary password of a clinic-created PATIENT account: /api/auth/me and
+        # /api/auth/change-password (plain get_current_user) still answer, nothing else.
+        if await needs_password_change(user):
+            raise APIError(
+                403,
+                "password_change_required",
+                "Changez votre mot de passe temporaire avant de continuer.",
             )
         return user
 

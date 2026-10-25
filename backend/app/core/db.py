@@ -12,12 +12,14 @@ from app.modules.followup.models import FollowupTask, Reminder
 from app.modules.llm.models import LlmInteraction
 from app.modules.patient_files.models import PatientFile
 from app.modules.patient_history.models import PatientHistorySummary
+from app.modules.patient_portal.models import PatientAccount
 from app.modules.patients.models import Patient, PatientSummary
 from app.modules.reports.models import MedicalReport
 
 DOCUMENT_MODELS: list[type[Document]] = [
     User,
     RefreshToken,
+    PatientAccount,
     Counter,
     Patient,
     PatientSummary,

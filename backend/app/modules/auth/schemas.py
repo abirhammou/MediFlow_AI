@@ -29,6 +29,7 @@ class UserProfile(BaseModel):
     patient_id: str | None
     created_at: datetime
     last_login_at: datetime | None
+    must_change_password: bool = False
 
     @classmethod
     def from_user(cls, user: User) -> "UserProfile":
@@ -51,6 +52,7 @@ class LoginResponse(BaseModel):
     role: Role
     first_name: str
     last_name: str
+    must_change_password: bool = False
 
 
 class RegistrationResponse(UserProfile):

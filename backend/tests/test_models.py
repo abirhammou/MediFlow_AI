@@ -44,6 +44,7 @@ from app.modules.patient_files.models import (
     PatientFile,
 )
 from app.modules.patient_history.models import HistoryScope, PatientHistorySummary
+from app.modules.patient_portal.models import PatientAccount
 from app.modules.patients.models import (
     Address,
     BloodType,
@@ -88,6 +89,7 @@ MINIMAL: dict[str, Callable[[], Document]] = {
     "patient_history_summaries": lambda: PatientHistorySummary(
         patient_id=oid(), scope=HistoryScope.TIMELINE, content="Chronologie"
     ),
+    "patient_accounts": lambda: PatientAccount(user_id=oid(), patient_id=oid()),
     "invoices": lambda: Invoice(
         number="FAC-2026-00001",
         patient_id=oid(),
@@ -204,6 +206,13 @@ FULL: dict[str, Callable[[], Document]] = {
         reviewed_by=oid(),
         reviewed_at=START,
         review_comment="Conforme.",
+    ),
+    "patient_accounts": lambda: PatientAccount(
+        user_id=oid(),
+        patient_id=oid(),
+        must_change_password=False,
+        temporary_password_issued_at=START,
+        issued_by=oid(),
     ),
     "invoices": lambda: Invoice(
         number="FAC-2026-00002",
@@ -363,7 +372,7 @@ COLLECTIONS = sorted(model.Settings.name for model in DOCUMENT_MODELS)
 
 
 def test_every_collection_has_a_model_and_samples():
-    assert len(COLLECTIONS) == 18
+    assert len(COLLECTIONS) == 19
     assert sorted(MINIMAL) == sorted(FULL) == COLLECTIONS
 
 

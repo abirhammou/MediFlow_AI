@@ -11,6 +11,7 @@ from app.modules.auth.schemas import (
     UserProfile,
 )
 from app.modules.auth.service import AuthService
+from app.modules.patient_portal.accounts import needs_password_change
 
 router = APIRouter()
 TAGS = ["auth"]
@@ -44,7 +45,9 @@ async def login(
 
 @router.get("/me", response_model=UserProfile)
 async def me(user: User = Depends(get_current_user)) -> UserProfile:
-    return UserProfile.from_user(user)
+    profile = UserProfile.from_user(user)
+    profile.must_change_password = await needs_password_change(user)
+    return profile
 
 
 @router.post("/change-password")

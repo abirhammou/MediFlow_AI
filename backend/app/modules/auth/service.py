@@ -15,6 +15,7 @@ from app.modules.auth.schemas import (
     RegistrationResponse,
     UserProfile,
 )
+from app.modules.patient_portal.accounts import mark_password_changed, needs_password_change
 from app.security import create_access_token, hash_password, verify_password
 
 MAX_FAILED_LOGINS = 5
@@ -85,6 +86,7 @@ class AuthService:
             role=user.role,
             first_name=user.first_name,
             last_name=user.last_name,
+            must_change_password=await needs_password_change(user),
         )
 
     async def change_password(self, user: User, request: ChangePasswordRequest) -> dict[str, str]:
@@ -93,8 +95,14 @@ class AuthService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Le mot de passe actuel est incorrect.",
             )
+        if request.new_password == request.current_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Le nouveau mot de passe doit être différent de l'actuel.",
+            )
         user.password_hash = hash_password(request.new_password)
         await user.save()
+        await mark_password_changed(user)
         return {"detail": "Mot de passe modifié."}
 
     @staticmethod

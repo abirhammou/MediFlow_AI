@@ -115,6 +115,23 @@ const users = defineCollection(
 users.createIndex({ email: 1 }, { unique: true, name: "uq_users_email" });
 users.createIndex({ role: 1, isActive: 1 }, { name: "idx_users_role" });
 
+// patient_accounts — PATIENT logins created by the clinic for a record (temporary password
+// to change at first login). Kept out of `users` so its validator is unchanged.
+const patientAccounts = defineCollection(
+  "patient_accounts",
+  ["userId", "patientId", "mustChangePassword", "createdAt", "updatedAt"],
+  {
+    userId: oid,
+    patientId: oid,
+    mustChangePassword: bool,
+    temporaryPasswordIssuedAt: optDate,
+    issuedBy: optOid,
+    ...timestamps,
+  }
+);
+patientAccounts.createIndex({ userId: 1 }, { unique: true, name: "uq_patient_accounts_user" });
+patientAccounts.createIndex({ patientId: 1 }, { unique: true, name: "uq_patient_accounts_patient" });
+
 // refresh_tokens — expired documents are removed automatically by the TTL index
 const refreshTokens = defineCollection(
   "refresh_tokens",
@@ -282,6 +299,11 @@ const appointments = defineCollection(
 appointments.createIndex({ doctorId: 1, startAt: 1 }, { name: "idx_appt_doctor_time" });
 appointments.createIndex({ patientId: 1, startAt: -1 }, { name: "idx_appt_patient" });
 appointments.createIndex({ status: 1, startAt: 1 }, { name: "idx_appt_status" });
+// No double booking: one active (PENDING / CONFIRMED) appointment per doctor and start time
+appointments.createIndex(
+  { doctorId: 1, startAt: 1 },
+  { unique: true, name: "uq_appt_doctor_slot", partialFilterExpression: { status: { $in: ["PENDING", "CONFIRMED"] } } }
+);
 
 const apptRequests = defineCollection(
   "appointment_requests",
