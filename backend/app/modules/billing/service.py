@@ -134,14 +134,21 @@ class BillingService:
     # ── Access ────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _can_read(user: User, patient_id: PydanticObjectId) -> bool:
+    def _can_read(
+        user: User, patient_id: PydanticObjectId, status: InvoiceStatus | None = None
+    ) -> bool:
+        """A PATIENT reads their own invoices once issued (never a DRAFT)."""
         if user.role in BILLING_ROLES["manage"]:
             return True
-        return user.role == Role.PATIENT and user.patient_id == patient_id
+        return (
+            user.role == Role.PATIENT
+            and user.patient_id == patient_id
+            and status != InvoiceStatus.DRAFT
+        )
 
     async def _invoice(self, user: User, invoice_id: str) -> Invoice:
         invoice = await Invoice.get(_oid(invoice_id, "invoice_not_found", "Facture introuvable."))
-        if invoice is None or not self._can_read(user, invoice.patient_id):
+        if invoice is None or not self._can_read(user, invoice.patient_id, invoice.status):
             raise _invoice_not_found()  # another patient's invoice: same answer as missing
         return invoice
 
@@ -279,11 +286,12 @@ class BillingService:
             if user.patient_id is None:
                 return InvoicePage(items=[], total=0, page=page, size=size)
             query["patientId"] = user.patient_id  # never chosen by the patient
+            query["status"] = {"$ne": InvoiceStatus.DRAFT.value}
         elif patient_id:
             query["patientId"] = _oid(
                 patient_id, "invalid_patient_id", "Identifiant patient invalide.", 422
             )
-        if status is not None:
+        if status is not None and not (user.role == Role.PATIENT and status == InvoiceStatus.DRAFT):
             query["status"] = status.value
         if number and number.strip():
             query["number"] = {"$regex": "^" + re.escape(number.strip().upper())}

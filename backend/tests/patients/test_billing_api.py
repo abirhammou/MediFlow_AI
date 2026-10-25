@@ -297,6 +297,7 @@ async def test_patient_reads_only_own_invoices(
 ):
     mine = await invoice()
     paid = (await pay(billing, mine["id"], 10_000)).json()
+    draft = await invoice(issue=False)
     theirs = await invoice(patient_id=other_patient["id"])
     me = await user_factory(email="leila@x.test", role=Role.PATIENT, patient_id=patient["id"])
 
@@ -310,11 +311,15 @@ async def test_patient_reads_only_own_invoices(
     )
     self_pay = await pay(billing, mine["id"], 1_000, user=me)
     reports = await billing("get", "/reports/unpaid", user=me)
+    hidden_draft = await billing("get", f"/invoices/{draft['id']}", user=me)
+    drafts = await billing("get", "/invoices", user=me, params={"status": "DRAFT"})
 
     assert [i["id"] for i in listing.json()["items"]] == [mine["id"]]  # patientId ignored
     assert own.status_code == 200 and own_receipt.status_code == 200
     assert foreign.status_code == 404 and foreign_pdf.status_code == 404
     assert create.status_code == 403 and self_pay.status_code == 403 and reports.status_code == 403
+    assert hidden_draft.status_code == 404  # a draft is not shown to the patient
+    assert draft["id"] not in {i["id"] for i in drafts.json()["items"]}
 
 
 async def test_no_token_is_401(api_client):
