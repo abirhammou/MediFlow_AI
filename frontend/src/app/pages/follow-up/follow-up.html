@@ -1,156 +1,345 @@
 <div class="module-page">
 
-  <!-- Header -->
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <div class="module-header">
     <div class="module-icon" style="background:#fef9c3;color:#d97706">
       <app-icon name="bell" [size]="24" />
     </div>
     <div>
       <h1>FollowUp AI</h1>
-      <p>Suivi, tâches et rappels administratifs</p>
+      <p>{{ perms().description }}</p>
+    </div>
+    <!-- Badge rôle -->
+    <span class="role-pill">
+      <app-icon name="user" [size]="13" /> {{ roleLabel() }}
+    </span>
+  </div>
+
+  <!-- ── Tabs ──────────────────────────────────────────────────────────────── -->
+  <div class="tabs-bar">
+    <button class="tab-btn" [class.active]="activeTab() === 'tasks'" (click)="activeTab.set('tasks')">
+      <app-icon name="bell" [size]="15" /> Tâches de suivi
+    </button>
+    <button class="tab-btn" [class.active]="activeTab() === 'reminders'" (click)="activeTab.set('reminders')">
+      <app-icon name="zap" [size]="15" /> Rappels IA
+    </button>
+  </div>
+
+  <!-- ── Tab : Rappels IA ──────────────────────────────────────────────────── -->
+  @if (activeTab() === 'reminders') {
+    <app-reminders />
+  }
+
+  <!-- ── Tab : Tâches ─────────────────────────────────────────────────────── -->
+  @if (activeTab() === 'tasks') {
+
+  <!-- ── Stats cards ─────────────────────────────────────────────────────── -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <span class="stat-label">Total</span>
+      <span class="stat-value">{{ stats().total }}</span>
+    </div>
+    <div class="stat-card pending">
+      <span class="stat-label">En attente</span>
+      <span class="stat-value">{{ stats().pending }}</span>
+    </div>
+    <div class="stat-card done">
+      <span class="stat-label">Terminées</span>
+      <span class="stat-value">{{ stats().done }}</span>
+    </div>
+    <div class="stat-card cancelled">
+      <span class="stat-label">Annulées</span>
+      <span class="stat-value">{{ stats().cancelled }}</span>
     </div>
   </div>
 
-  <!-- Toolbar -->
+  <!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
   <div class="toolbar">
-    <button class="btn btn-primary" (click)="openCreate()">
-      <app-icon name="zap" [size]="16" /> Nouvelle tâche
-    </button>
-    <button class="btn btn-outline" (click)="loadTasks()">
-      <app-icon name="activity" [size]="16" /> Actualiser
-    </button>
+    @if (perms().canCreate) {
+      <button class="btn btn-primary" (click)="openCreate()">
+        <app-icon name="zap" [size]="15" /> Nouvelle tâche
+      </button>
+    }
+    <div class="filters">
+      <button class="filter-btn" [class.active]="statusFilter() === 'all'"       (click)="setFilter('all')">Toutes</button>
+      <button class="filter-btn" [class.active]="statusFilter() === 'pending'"   (click)="setFilter('pending')">En attente</button>
+      <button class="filter-btn" [class.active]="statusFilter() === 'done'"      (click)="setFilter('done')">Terminées</button>
+      <button class="filter-btn" [class.active]="statusFilter() === 'cancelled'" (click)="setFilter('cancelled')">Annulées</button>
+    </div>
   </div>
 
-  <!-- Tasks list -->
+  <!-- ── Error ────────────────────────────────────────────────────────────── -->
+  @if (apiError()) {
+    <div class="alert" role="alert">{{ apiError() }}</div>
+  }
+
+  <!-- ── Task list ─────────────────────────────────────────────────────────── -->
   @if (loading()) {
-    <p class="loading">Chargement des tâches…</p>
+    <div class="loading-state">
+      <app-icon name="activity" [size]="28" />
+      <p>Chargement des tâches…</p>
+    </div>
   } @else if (tasks().length === 0) {
-    <div class="empty">
+    <div class="empty-state">
       <app-icon name="bell" [size]="48" />
-      <p>Aucune tâche pour le moment. Créez-en une !</p>
+      <h3>Aucune tâche</h3>
+      <p>{{ statusFilter() === 'all' ? 'Aucune tâche de suivi pour le moment.' : 'Aucune tâche avec ce statut.' }}</p>
+      @if (perms().canCreate && statusFilter() === 'all') {
+        <button class="btn btn-primary" (click)="openCreate()">Créer une tâche</button>
+      }
     </div>
   } @else {
     <div class="tasks-grid">
       @for (task of tasks(); track task.id) {
-        <div class="task-card">
+        <div class="task-card" [class]="task.status">
           <div class="task-top">
-            <span class="task-desc">{{ task.description }}</span>
-            <span class="badge" [class]="badgeClass(task.status)">{{ statusLabel(task.status) }}</span>
+            <span class="badge" [class]="task.status">{{ statusLabel(task.status) }}</span>
+            <div class="task-actions">
+              <!-- Générer rappel : ADMIN, ADMIN_STAFF, SECRETARY, DOCTOR -->
+              @if (perms().canGenerateReminder) {
+                <button class="btn-icon" (click)="prefillReminder(task)" title="Générer un rappel IA">
+                  <app-icon name="zap" [size]="14" />
+                </button>
+              }
+              <!-- Modifier : ADMIN, ADMIN_STAFF, SECRETARY, DOCTOR -->
+              @if (perms().canEdit) {
+                <button class="btn-icon" (click)="openEdit(task)" title="Modifier">
+                  <app-icon name="settings" [size]="14" />
+                </button>
+              }
+              <!-- Supprimer : ADMIN, ADMIN_STAFF seulement -->
+              @if (perms().canDelete) {
+                <button class="btn-icon danger" (click)="deleteTask(task.id)" title="Supprimer">
+                  <app-icon name="x" [size]="14" />
+                </button>
+              }
+            </div>
           </div>
+
+          <p class="task-desc" (click)="openDetail(task)">{{ task.description }}</p>
+
           <div class="task-meta">
-            <span><app-icon name="user" [size]="13" /> {{ task.patient_name }}</span>
-            <span><app-icon name="calendar" [size]="13" /> RDV : {{ task.appointment_date }}</span>
-            <span><app-icon name="activity" [size]="13" /> {{ task.appointment_reason }}</span>
-            <span><app-icon name="bell" [size]="13" /> Échéance : {{ task.due_date }}</span>
+            <span><app-icon name="user" [size]="12" /> {{ task.patient_name }}</span>
+            <span><app-icon name="calendar" [size]="12" /> RDV : {{ task.appointment_date }}</span>
+            <span><app-icon name="activity" [size]="12" /> {{ task.appointment_reason }}</span>
           </div>
-          <div class="task-actions">
-            <button class="btn-icon" (click)="openEdit(task)" title="Modifier">
-              <app-icon name="zap" [size]="14" />
-            </button>
-            <button class="btn-icon danger" (click)="deleteTask(task.id)" title="Supprimer">
-              <app-icon name="x" [size]="14" />
-            </button>
+
+          <div class="task-footer">
+            <span class="due-date" [class.overdue]="task.status === 'pending' && task.due_date < today">
+              <app-icon name="bell" [size]="12" /> Échéance : {{ task.due_date }}
+            </span>
+            <button class="link-btn" (click)="openDetail(task)">Détail →</button>
           </div>
         </div>
       }
     </div>
   }
 
-  <!-- LLM Reminder generator -->
-  <div class="reminder-box">
-    <h2><app-icon name="zap" [size]="18" /> Générer un rappel IA</h2>
-    <form [formGroup]="reminderForm" (ngSubmit)="generateReminder()">
-      <div class="reminder-form">
-        <div class="field">
-          <label>Nom du patient</label>
-          <input class="input" formControlName="patient_name" placeholder="Jean Dupont" />
+  <!-- ── LLM Reminder : ADMIN, ADMIN_STAFF, SECRETARY, DOCTOR ─────────────── -->
+  @if (perms().canGenerateReminder) {
+    <div class="reminder-box" id="reminder-section">
+      <div class="reminder-header">
+        <app-icon name="zap" [size]="20" />
+        <div>
+          <h2>Générer un rappel IA</h2>
+          <p>Le LLM rédige un brouillon à partir des données du rendez-vous confirmé uniquement.</p>
         </div>
-        <div class="field">
-          <label>Date du rendez-vous</label>
-          <input class="input" type="date" formControlName="appointment_date" />
-        </div>
-        <div class="field">
-          <label>Motif</label>
-          <input class="input" formControlName="appointment_reason" placeholder="Consultation cardiologie" />
-        </div>
-        <button type="submit" class="btn btn-primary" [disabled]="reminderLoading()">
-          @if (reminderLoading()) { Génération… } @else { Générer }
-        </button>
       </div>
-    </form>
 
-    @if (reminderResult(); as r) {
-      <div class="reminder-result">
-        <h3>{{ r.subject }}</h3>
-        <p>{{ r.body }}</p>
-      </div>
-    }
-  </div>
+      <form [formGroup]="reminderForm" (ngSubmit)="generateReminder()">
+        <div class="reminder-form">
+          <div class="field">
+            <label>Nom du patient</label>
+            <input class="input" [class.invalid]="isInvalid(reminderForm, 'patient_name')"
+                   formControlName="patient_name" placeholder="Jean Dupont" />
+            @if (isInvalid(reminderForm, 'patient_name')) {
+              <span class="error">Champ requis</span>
+            }
+          </div>
+          <div class="field">
+            <label>Date du rendez-vous confirmé</label>
+            <input class="input" type="date" [class.invalid]="isInvalid(reminderForm, 'appointment_date')"
+                   formControlName="appointment_date" />
+          </div>
+          <div class="field">
+            <label>Motif du rendez-vous</label>
+            <input class="input" [class.invalid]="isInvalid(reminderForm, 'appointment_reason')"
+                   formControlName="appointment_reason" placeholder="Consultation cardiologie" />
+          </div>
+          <button type="submit" class="btn btn-primary" [disabled]="reminderLoading()">
+            @if (reminderLoading()) {
+              <app-icon name="activity" [size]="15" /> Génération…
+            } @else {
+              <app-icon name="zap" [size]="15" /> Générer
+            }
+          </button>
+        </div>
+      </form>
 
-</div>
+      @if (reminderError()) {
+        <div class="alert" style="margin-top:1rem">{{ reminderError() }}</div>
+      }
 
-<!-- Modal : créer une tâche -->
-@if (showCreateModal()) {
+      @if (reminderResult(); as r) {
+        <div class="reminder-result">
+          <div class="reminder-result-label">
+            <app-icon name="shield" [size]="14" />
+            Garde-fou : brouillon basé uniquement sur les données fournies
+          </div>
+          <h3>{{ r.subject }}</h3>
+          <p>{{ r.body }}</p>
+        </div>
+      }
+    </div>
+  }
+
+  } <!-- end tab tasks -->
+
+</div> <!-- end module-page -->
+
+<!-- ── Modal : créer une tâche (ADMIN, ADMIN_STAFF, SECRETARY) ──────────────── -->
+@if (showCreateModal() && perms().canCreate) {
   <div class="modal-backdrop" (click)="showCreateModal.set(false)">
     <div class="modal" (click)="$event.stopPropagation()">
-      <h2>Nouvelle tâche de suivi</h2>
+      <div class="modal-head">
+        <h2>Nouvelle tâche de suivi</h2>
+        <button class="btn-icon" (click)="showCreateModal.set(false)"><app-icon name="x" [size]="16" /></button>
+      </div>
       <form [formGroup]="createForm" (ngSubmit)="submitCreate()">
         <div class="field">
-          <label>Description</label>
-          <input class="input" formControlName="description" placeholder="Rappel bilan sanguin…" />
+          <label>Description <span class="req">*</span></label>
+          <input class="input" [class.invalid]="isInvalid(createForm,'description')"
+                 formControlName="description" placeholder="Ex : Rappel bilan sanguin" />
+          @if (isInvalid(createForm,'description')) { <span class="error">Description requise</span> }
         </div>
         <div class="field">
-          <label>Échéance</label>
-          <input class="input" type="date" formControlName="due_date" />
+          <label>Échéance <span class="req">*</span></label>
+          <input class="input" type="date" [class.invalid]="isInvalid(createForm,'due_date')"
+                 formControlName="due_date" />
+        </div>
+        <div class="modal-row">
+          <div class="field">
+            <label>Nom du patient <span class="req">*</span></label>
+            <input class="input" [class.invalid]="isInvalid(createForm,'patient_name')"
+                   formControlName="patient_name" placeholder="Jean Dupont" />
+          </div>
+          <div class="field">
+            <label>Date du RDV <span class="req">*</span></label>
+            <input class="input" type="date" formControlName="appointment_date" />
+          </div>
         </div>
         <div class="field">
-          <label>Nom du patient</label>
-          <input class="input" formControlName="patient_name" placeholder="Jean Dupont" />
-        </div>
-        <div class="field">
-          <label>Date du rendez-vous</label>
-          <input class="input" type="date" formControlName="appointment_date" />
-        </div>
-        <div class="field">
-          <label>Motif du rendez-vous</label>
-          <input class="input" formControlName="appointment_reason" placeholder="Consultation générale" />
+          <label>Motif du rendez-vous <span class="req">*</span></label>
+          <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
+                 formControlName="appointment_reason" placeholder="Consultation générale" />
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" (click)="showCreateModal.set(false)">Annuler</button>
-          <button type="submit" class="btn btn-primary">Créer</button>
+          <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+            {{ submitting() ? 'Création…' : 'Créer la tâche' }}
+          </button>
         </div>
       </form>
     </div>
   </div>
 }
 
-<!-- Modal : modifier une tâche -->
-@if (showEditModal()) {
+<!-- ── Modal : modifier (ADMIN, ADMIN_STAFF, SECRETARY, DOCTOR) ─────────────── -->
+@if (showEditModal() && perms().canEdit) {
   <div class="modal-backdrop" (click)="showEditModal.set(false)">
     <div class="modal" (click)="$event.stopPropagation()">
-      <h2>Modifier la tâche</h2>
+      <div class="modal-head">
+        <h2>Modifier la tâche</h2>
+        <button class="btn-icon" (click)="showEditModal.set(false)"><app-icon name="x" [size]="16" /></button>
+      </div>
       <form [formGroup]="editForm" (ngSubmit)="submitEdit()">
-        <div class="field">
-          <label>Description</label>
-          <input class="input" formControlName="description" />
-        </div>
-        <div class="field">
-          <label>Échéance</label>
-          <input class="input" type="date" formControlName="due_date" />
-        </div>
-        <div class="field">
-          <label>Statut</label>
-          <select class="input" formControlName="status">
-            <option value="pending">En attente</option>
-            <option value="done">Terminé</option>
-            <option value="cancelled">Annulé</option>
-          </select>
+        <!-- DOCTOR : peut seulement changer le statut -->
+        @if (perms().canCreate) {
+          <div class="field">
+            <label>Description</label>
+            <input class="input" formControlName="description" />
+          </div>
+        }
+        <div class="modal-row">
+          @if (perms().canCreate) {
+            <div class="field">
+              <label>Échéance</label>
+              <input class="input" type="date" formControlName="due_date" />
+            </div>
+          }
+          <div class="field">
+            <label>Statut</label>
+            <select class="input" formControlName="status">
+              <option value="pending">En attente</option>
+              <option value="done">Terminé</option>
+              <option value="cancelled">Annulé</option>
+            </select>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" (click)="showEditModal.set(false)">Annuler</button>
-          <button type="submit" class="btn btn-primary">Enregistrer</button>
+          <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+            {{ submitting() ? 'Enregistrement…' : 'Enregistrer' }}
+          </button>
         </div>
       </form>
+    </div>
+  </div>
+}
+
+<!-- ── Modal : détail ───────────────────────────────────────────────────────── -->
+@if (showDetailModal() && detailTask(); as task) {
+  <div class="modal-backdrop" (click)="showDetailModal.set(false)">
+    <div class="modal modal-lg" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <h2>Détail de la tâche</h2>
+        <button class="btn-icon" (click)="showDetailModal.set(false)"><app-icon name="x" [size]="16" /></button>
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-item full">
+          <span class="detail-label">Description</span>
+          <span class="detail-value">{{ task.description }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Statut</span>
+          <span class="badge" [class]="task.status">{{ statusLabel(task.status) }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Échéance</span>
+          <span class="detail-value">{{ task.due_date }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Patient</span>
+          <span class="detail-value">{{ task.patient_name }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Date du RDV</span>
+          <span class="detail-value">{{ task.appointment_date }}</span>
+        </div>
+        <div class="detail-item full">
+          <span class="detail-label">Motif du rendez-vous</span>
+          <span class="detail-value">{{ task.appointment_reason }}</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        @if (perms().canDelete) {
+          <button class="btn btn-outline danger-btn" (click)="deleteTask(task.id); showDetailModal.set(false)">
+            <app-icon name="x" [size]="14" /> Supprimer
+          </button>
+        }
+        @if (perms().canGenerateReminder) {
+          <button class="btn btn-outline" (click)="prefillReminder(task); showDetailModal.set(false)">
+            <app-icon name="zap" [size]="14" /> Générer rappel IA
+          </button>
+        }
+        @if (perms().canEdit) {
+          <button class="btn btn-primary" (click)="showDetailModal.set(false); openEdit(task)">
+            <app-icon name="settings" [size]="14" /> Modifier
+          </button>
+        }
+      </div>
     </div>
   </div>
 }

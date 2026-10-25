@@ -6,7 +6,7 @@ from dotenv import dotenv_values
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ProviderName = Literal["mock", "openai_compatible", "anthropic"]
+ProviderName = Literal["mock", "openai_compatible", "anthropic", "gemini"]
 Environment = Literal["dev", "test", "prod"]
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 MODULES_DIRECTORY = BACKEND_ROOT / "app" / "modules"
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
             return os.environ.get(name, configured_values.get(name) or "")
 
         provider = setting("PROVIDER") or "mock"
-        if provider not in {"mock", "openai_compatible", "anthropic"}:
+        if provider not in {"mock", "openai_compatible", "anthropic", "gemini"}:
             raise ValueError(f"Fournisseur LLM inconnu pour le module {module}.")
         return (
             cast(ProviderName, provider),
