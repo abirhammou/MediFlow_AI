@@ -152,10 +152,13 @@ def mongo_container() -> Iterator:
         pytest.skip(f"Docker is not reachable, MongoDB tests skipped: {exc}")
 
     from testcontainers.community.mongodb import MongoDbContainer
+    from testcontainers.core.waiting_utils import wait_for_logs
 
     container = MongoDbContainer(MONGO_IMAGE).with_env("MONGO_APP_PASSWORD", APP_PASSWORD)
     with container:
-        # The entrypoint restarts mongod after creating the root user: wait for the final one.
+        # The entrypoint runs a temporary mongod to create the root user, then restarts it:
+        # a ping can succeed on the temporary one, so wait for the end of that phase first.
+        wait_for_logs(container, "MongoDB init process complete", timeout=60)
         deadline = time.monotonic() + 60
         while _mongosh(container, "--eval", "db.adminCommand('ping')")[0] != 0:
             if time.monotonic() > deadline:
