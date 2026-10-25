@@ -1,0 +1,224 @@
+<div class="reminders-page">
+
+  <!-- ── Header ── -->
+  <div class="rem-header">
+    <div class="rem-icon"><app-icon name="zap" [size]="22" /></div>
+    <div>
+      <h2>Générer un rappel IA</h2>
+      <p>Gemini rédige un brouillon · vous le validez · vous l'exportez</p>
+    </div>
+  </div>
+
+  <!-- ── Workflow steps ── -->
+  <div class="workflow-bar">
+    @for (s of steps; track s.key; let i = $index) {
+      <div class="wf-step" [class.active]="false">
+        <div class="wf-num">{{ i + 1 }}</div>
+        <span>{{ s.label }}</span>
+      </div>
+      @if (i < steps.length - 1) { <div class="wf-sep"></div> }
+    }
+  </div>
+
+  <!-- ── Génération ── -->
+  <div class="gen-box">
+    <h3><app-icon name="zap" [size]="16" /> Étape 1 — Générer avec Gemini</h3>
+    <form [formGroup]="genForm" (ngSubmit)="generate()">
+      <div class="gen-grid">
+        <div class="field">
+          <label>Nom du patient <span class="req">*</span></label>
+          <input class="input" [class.invalid]="isInvalid('patient_name')"
+                 formControlName="patient_name" placeholder="Jean Dupont" />
+        </div>
+        <div class="field">
+          <label>Date du rendez-vous <span class="req">*</span></label>
+          <input class="input" type="date" formControlName="appointment_date" />
+        </div>
+        <div class="field">
+          <label>Motif <span class="req">*</span></label>
+          <input class="input" [class.invalid]="isInvalid('appointment_reason')"
+                 formControlName="appointment_reason" placeholder="Consultation cardiologie" />
+        </div>
+        <button type="submit" class="btn btn-primary" [disabled]="generating()">
+          @if (generating()) { <app-icon name="activity" [size]="15" /> Génération… }
+          @else { <app-icon name="zap" [size]="15" /> Générer }
+        </button>
+      </div>
+    </form>
+
+    @if (genError()) {
+      <div class="alert" style="margin-top:.75rem">{{ genError() }}</div>
+    }
+
+    <!-- Draft result -->
+    @if (draft(); as d) {
+      <div class="draft-result">
+        <div class="draft-label">
+          <app-icon name="shield" [size]="13" />
+          Garde-fou Gemini — basé uniquement sur les données fournies
+        </div>
+        <div class="draft-subject">{{ d.subject }}</div>
+        <div class="draft-body">{{ d.body }}</div>
+        <div class="draft-actions">
+          <button class="btn btn-primary" (click)="saveReminder()" [disabled]="saving()">
+            @if (saving()) { Sauvegarde… }
+            @else { <app-icon name="file" [size]="14" /> Sauvegarder ce rappel }
+          </button>
+          <button class="btn btn-outline" (click)="draft.set(null)">Annuler</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- ── Liste des rappels sauvegardés ── -->
+  <div class="list-section">
+    <div class="list-header">
+      <h3>Rappels sauvegardés <span class="count">{{ reminders().length }}</span></h3>
+      <button class="btn btn-outline btn-sm" (click)="loadReminders()">
+        <app-icon name="activity" [size]="14" /> Actualiser
+      </button>
+    </div>
+
+    @if (loading()) {
+      <div class="loading-state"><app-icon name="activity" [size]="24" /><p>Chargement…</p></div>
+    } @else if (reminders().length === 0) {
+      <div class="empty-state">
+        <app-icon name="zap" [size]="40" />
+        <p>Aucun rappel sauvegardé. Générez-en un ci-dessus.</p>
+      </div>
+    } @else {
+      <div class="reminders-list">
+        @for (r of reminders(); track r.id) {
+          <div class="reminder-card" [class]="r.step">
+
+            <!-- Card header -->
+            <div class="card-head">
+              <div class="card-info">
+                <span class="step-badge" [style.background]="stepColor(r.step) + '22'"
+                      [style.color]="stepColor(r.step)">
+                  {{ stepLabel(r.step) }}
+                </span>
+                <span class="card-patient"><app-icon name="user" [size]="12" /> {{ r.patient_name }}</span>
+              </div>
+              <div class="card-actions">
+                <button class="btn-icon" (click)="openDetail(r)" title="Voir détail">
+                  <app-icon name="eye" [size]="13" />
+                </button>
+                <button class="btn-icon danger" (click)="deleteReminder(r.id)" title="Supprimer">
+                  <app-icon name="x" [size]="13" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Sujet -->
+            <p class="card-subject" (click)="openDetail(r)">{{ r.subject }}</p>
+
+            <!-- Meta -->
+            <div class="card-meta">
+              <span><app-icon name="calendar" [size]="11" /> {{ r.appointment_date }}</span>
+              <span><app-icon name="activity" [size]="11" /> {{ r.appointment_reason }}</span>
+              <span class="card-date">{{ formatDate(r.created_at) }}</span>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="progress-bar">
+              @for (s of steps; track s.key; let i = $index) {
+                <div class="progress-step" [class.done]="stepIndex(r.step) >= i"
+                     [style.background]="stepIndex(r.step) >= i ? stepColor(r.step) : '#e2e8f0'">
+                </div>
+              }
+            </div>
+
+            <!-- Actions bas de carte -->
+            <div class="card-footer">
+              <!-- Avancer l'étape -->
+              @if (canAdvance(r.step)) {
+                <button class="btn btn-outline btn-xs" (click)="advanceStep(r)">
+                  <app-icon name="activity" [size]="12" /> {{ nextStepLabel(r.step) }}
+                </button>
+              }
+
+              <!-- Export buttons — uniquement si approved ou exported -->
+              @if (r.step === 'approved' || r.step === 'exported') {
+                <div class="export-btns">
+                  <button class="export-btn pdf" (click)="exportPdf(r.id)"
+                          [disabled]="exportingId() === r.id" title="Télécharger PDF">
+                    <app-icon name="file" [size]="13" /> PDF
+                  </button>
+                  <button class="export-btn word" (click)="exportDocx(r.id)"
+                          [disabled]="exportingId() === r.id" title="Télécharger Word">
+                    <app-icon name="file-text" [size]="13" /> Word
+                  </button>
+                  <button class="export-btn email" (click)="exportEmail(r.id)"
+                          [disabled]="exportingId() === r.id" title="Aperçu Email">
+                    <app-icon name="chat" [size]="13" /> Email
+                  </button>
+                </div>
+              }
+            </div>
+
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+</div>
+
+<!-- ── Modal détail ── -->
+@if (showDetail() && selected(); as r) {
+  <div class="modal-backdrop" (click)="showDetail.set(false)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <h2>Détail du rappel</h2>
+        <button class="btn-icon" (click)="showDetail.set(false)"><app-icon name="x" [size]="16" /></button>
+      </div>
+
+      <!-- Stepper -->
+      <div class="modal-stepper">
+        @for (s of steps; track s.key; let i = $index) {
+          <div class="ms-step" [class.done]="stepIndex(r.step) >= i"
+               [class.current]="stepIndex(r.step) === i"
+               [style.--c]="stepColor(r.step)">
+            <div class="ms-dot"><app-icon [name]="s.icon" [size]="12" /></div>
+            <span>{{ s.label }}</span>
+          </div>
+          @if (i < steps.length - 1) {
+            <div class="ms-line" [class.done]="stepIndex(r.step) > i"></div>
+          }
+        }
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-item"><span class="detail-label">Patient</span><span>{{ r.patient_name }}</span></div>
+        <div class="detail-item"><span class="detail-label">Date RDV</span><span>{{ r.appointment_date }}</span></div>
+        <div class="detail-item full"><span class="detail-label">Motif</span><span>{{ r.appointment_reason }}</span></div>
+        <div class="detail-item full">
+          <span class="detail-label">Sujet</span>
+          <span class="detail-subject">{{ r.subject }}</span>
+        </div>
+        <div class="detail-item full">
+          <span class="detail-label">Corps du message</span>
+          <span class="detail-body">{{ r.body }}</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        @if (canAdvance(r.step)) {
+          <button class="btn btn-outline" (click)="advanceStep(r)">
+            <app-icon name="activity" [size]="14" /> {{ nextStepLabel(r.step) }}
+          </button>
+        }
+        <button class="btn export-btn pdf" (click)="exportPdf(r.id)">
+          <app-icon name="file" [size]="14" /> PDF
+        </button>
+        <button class="btn export-btn word" (click)="exportDocx(r.id)">
+          <app-icon name="file-text" [size]="14" /> Word
+        </button>
+        <button class="btn export-btn email" (click)="exportEmail(r.id)">
+          <app-icon name="chat" [size]="14" /> Email
+        </button>
+      </div>
+    </div>
+  </div>
+}
