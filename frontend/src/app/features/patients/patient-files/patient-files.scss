@@ -1,0 +1,44 @@
+:host { display: block; margin-bottom: 1rem; }
+
+.files { padding: 1.25rem 1.5rem; }
+.files-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin-bottom: .75rem;
+  h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 700; }
+}
+
+.meta { margin-top: .25rem; font-size: .78rem; color: var(--muted); }
+.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.end { justify-content: flex-end; }
+
+.upload { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1rem; padding: 1rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f8fafc;
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
+  .field { display: flex; flex-direction: column; gap: .375rem; font-size: .8rem; font-weight: 600; }
+  input[type='file'] { font-size: .85rem; }
+}
+
+.filters { display: flex; gap: .25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border);
+  button { padding: .45rem .75rem; border: 0; border-bottom: 2px solid transparent; background: none;
+    font: inherit; font-size: .85rem; font-weight: 600; color: var(--muted); cursor: pointer;
+    &:hover { color: var(--ink); }
+    &.active { color: var(--primary); border-bottom-color: var(--primary); }
+  }
+}
+
+.empty { display: flex; flex-direction: column; gap: .25rem; padding: 1.5rem 1rem; text-align: center;
+  color: var(--muted); font-size: .875rem; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  strong { color: var(--ink); }
+}
+
+.file-list { list-style: none; margin: 0; padding: 0;
+  li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+    padding: .75rem 0; border-bottom: 1px solid var(--border);
+    &:last-child { border-bottom: 0; } }
+}
+.file-main { min-width: 0; }
+.file-title { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .9rem; }
+
+.chip { padding: .1rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 700;
+  &[data-category='MEDICAL'] { background: #eff6ff; color: #1d4ed8; }
+  &[data-category='ADMINISTRATIVE'] { background: #f1f5f9; color: #475569; }
+}

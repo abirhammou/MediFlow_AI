@@ -1,0 +1,105 @@
+<section class="card files" aria-labelledby="files-title">
+  <header class="files-head">
+    <h2 id="files-title"><app-icon name="file" [size]="18" /> Documents</h2>
+    @if (perms.writableFileCategories().length && !formOpen()) {
+      <button type="button" class="btn btn-primary btn-sm" (click)="openForm()">
+        <app-icon name="plus" [size]="16" /> Ajouter un document
+      </button>
+    }
+  </header>
+
+  @if (formOpen()) {
+    <form class="upload" (submit)="$event.preventDefault(); upload()">
+      <label class="field">
+        <span>Fichier (PDF, PNG ou JPEG, 10 Mo max.)</span>
+        <input type="file" [accept]="accepted" (change)="pick($event)" required />
+      </label>
+      <div class="row">
+        <label class="field">
+          <span>Catégorie</span>
+          <select class="input" [value]="category()" (change)="setCategory($any($event.target).value)">
+            @for (c of perms.writableFileCategories(); track c) {
+              <option [value]="c">{{ categoryLabels[c] }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Type</span>
+          <select class="input" [value]="type()" (change)="type.set($any($event.target).value)">
+            @for (t of types(); track t) {
+              <option [value]="t" [selected]="t === type()">{{ typeLabels[t] }}</option>
+            }
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Titre</span>
+        <input class="input" maxlength="200" [value]="title()" (input)="title.set($any($event.target).value)" required />
+      </label>
+      @if (uploadError()) {
+        <div class="alert" role="alert">{{ uploadError() }}</div>
+      }
+      <div class="actions end">
+        <button type="button" class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="formOpen.set(false)">Annuler</button>
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="uploading() || !selected() || !title().trim()"
+                [attr.aria-busy]="uploading()">
+          {{ uploading() ? 'Envoi…' : 'Enregistrer' }}
+        </button>
+      </div>
+    </form>
+  }
+
+  @if (perms.readableFileCategories().length > 1 && all().length) {
+    <div class="filters" role="group" aria-label="Filtrer par catégorie">
+      <button type="button" [class.active]="filter() === 'ALL'" (click)="filter.set('ALL')">Tous ({{ counts().ALL }})</button>
+      @for (c of perms.readableFileCategories(); track c) {
+        <button type="button" [class.active]="filter() === c" (click)="filter.set(c)">
+          {{ categoryLabels[c] }} ({{ counts()[c] }})
+        </button>
+      }
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="muted" aria-busy="true">Chargement des documents…</p>
+  } @else if (error()) {
+    <div class="alert" role="alert">{{ error() }}</div>
+  } @else if (visible().length === 0) {
+    <div class="empty">
+      <strong>Aucun document</strong>
+      @if (perms.writableFileCategories().length) {
+        <span>Ajoutez une attestation, un scan ou un résultat d'analyse.</span>
+      } @else if (perms.readableFileCategories().length === 1) {
+        <span>Aucun document {{ categoryLabels[perms.readableFileCategories()[0]].toLowerCase() }} pour ce dossier.</span>
+      }
+    </div>
+  } @else {
+    <ul class="file-list">
+      @for (f of visible(); track f.id) {
+        <li>
+          <div class="file-main">
+            <div class="file-title">
+              <span class="chip" [attr.data-category]="f.category">{{ categoryLabels[f.category] }}</span>
+              <strong>{{ f.title }}</strong>
+            </div>
+            <p class="meta">
+              {{ typeLabels[f.type] }} · {{ formatSize(f.size) }} · {{ formatDateTime(f.createdAt) }}
+              @if (f.uploadedByName) { · ajouté par {{ f.uploadedByName }} }
+            </p>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-outline btn-sm" [disabled]="busyId() === f.id" (click)="download(f)">
+              Télécharger
+            </button>
+            @if (canDelete(f)) {
+              <button type="button" class="btn btn-danger btn-sm" [disabled]="busyId() === f.id"
+                      [attr.aria-label]="'Retirer ' + f.title" (click)="remove(f)">
+                <app-icon name="trash" [size]="16" />
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

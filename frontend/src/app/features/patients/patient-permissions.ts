@@ -1,6 +1,7 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { AuthService, Role } from '../../core/auth/auth.service';
 import { ReportListItem } from '../../pages/report-writer/reports.api';
+import { FileCategory } from './patient-file.model';
 
 /** Same matrix as PATIENT_ROLES in backend/app/modules/patients/router.py. */
 export const PATIENT_ROLES = {
@@ -22,6 +23,18 @@ export const REPORT_ROLES = {
   read: ['SECRETARY', 'DOCTOR', 'ADMIN'],
   write: ['DOCTOR'],
 } as const satisfies Record<string, readonly Role[]>;
+
+/** Same matrix as FILE_ROLES in backend/app/modules/patient_files/service.py. */
+export const FILE_ROLES = {
+  ADMINISTRATIVE: { read: ['SECRETARY', 'ADMIN', 'PATIENT'], write: ['SECRETARY', 'ADMIN'] },
+  MEDICAL: { read: ['DOCTOR', 'SECRETARY', 'ADMIN', 'PATIENT'], write: ['SECRETARY', 'ADMIN'] },
+} as const satisfies Record<FileCategory, { read: readonly Role[]; write: readonly Role[] }>;
+
+export function fileCategoriesFor(role: Role | undefined, action: 'read' | 'write'): FileCategory[] {
+  return (Object.keys(FILE_ROLES) as FileCategory[]).filter(
+    (category) => role !== undefined && (FILE_ROLES[category][action] as readonly Role[]).includes(role),
+  );
+}
 
 /** Only the author edits or finalizes a report, and only while it is a DRAFT (reports/service.py). */
 export function canEditReport(
@@ -50,6 +63,8 @@ export class PatientPermissions {
   readonly canReviewSummary = this.has(SUMMARY_ROLES.review);
   readonly canReadReports = this.has(REPORT_ROLES.read);
   readonly canWriteReports = this.has(REPORT_ROLES.write);
+  readonly readableFileCategories = computed(() => fileCategoriesFor(this.auth.user()?.role, 'read'));
+  readonly writableFileCategories = computed(() => fileCategoriesFor(this.auth.user()?.role, 'write'));
 
   canEditReport(report: Pick<ReportListItem, 'is_mine' | 'status'>): boolean {
     return canEditReport(this.auth.user()?.role, report);

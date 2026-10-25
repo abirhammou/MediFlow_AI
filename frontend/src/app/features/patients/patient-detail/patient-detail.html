@@ -27,6 +27,10 @@
     <app-patient-reports [patientId]="p.id" />
   }
 
+  @if (perms.readableFileCategories().length) {
+    <app-patient-files [patientId]="p.id" />
+  }
+
   <div class="cards">
     <section class="card info">
       <h2>Identité</h2>
