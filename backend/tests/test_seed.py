@@ -7,6 +7,7 @@ from app.modules.documents.models import MedicalDocument
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder
 from app.modules.llm.models import LlmInteraction
+from app.modules.patient_files.models import FileCategory, PatientFile
 from app.modules.patients.models import Patient, PatientSummary, SummaryStatus
 from app.modules.reports.guardrails import check_content
 from app.modules.reports.models import MedicalReport, ReportStatus
@@ -29,6 +30,7 @@ async def counts(db) -> dict[str, int]:
         "followup_reminders": await db["followup_reminders"].count_documents({}),
         "reminders": await Reminder.count(),
         "llm_interactions": await LlmInteraction.count(),
+        "patient_files": await PatientFile.count(),
     }
 
 
@@ -47,6 +49,19 @@ async def test_seed_is_idempotent(db):
     assert all(first.created[kind] == total for kind, total in after_first.items())
     assert await counts(db) == after_first
     assert sum(second.created.values()) == 0
+
+
+async def test_every_patient_has_administrative_and_medical_files(db, files_dir):
+    await seed("seed-test-password")
+
+    files = await PatientFile.find_all().to_list()
+    categories: dict = {}
+    for file in files:
+        categories.setdefault(file.patient_id, set()).add(file.category)
+        assert (files_dir / file.storage_path).read_bytes().startswith(b"%PDF-")
+
+    assert len(categories) == len(PATIENTS) + len(DEV_PATIENTS)
+    assert all(found == set(FileCategory) for found in categories.values())
 
 
 async def test_every_patient_has_reports_in_every_state(db):
