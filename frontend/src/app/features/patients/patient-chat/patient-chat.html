@@ -1,0 +1,52 @@
+<dialog #drawer class="drawer" aria-labelledby="chat-title" (cancel)="close()">
+  <header class="drawer-head">
+    <div>
+      <h2 id="chat-title"><app-icon name="chat" [size]="18" /> Questions sur le dossier (IA)</h2>
+      <p class="muted">Réponses tirées uniquement des comptes rendus, des notes et des documents médicaux, avec leurs sources. Rien n'est enregistré.</p>
+    </div>
+    <button type="button" class="icon-btn" aria-label="Fermer" (click)="close()"><app-icon name="x" [size]="18" /></button>
+  </header>
+
+  <div #thread class="thread" aria-live="polite">
+    @if (messages().length === 0) {
+      <div class="empty">
+        <strong>Posez une question</strong>
+        <span>Par exemple : « Quel était le dernier LDL ? » ou « Quel traitement a été changé et pourquoi ? »</span>
+      </div>
+    }
+    @for (m of messages(); track $index) {
+      <div class="bubble question">{{ m.question }}</div>
+      @if (m.answer; as a) {
+        <div class="bubble answer" [class.not-found]="!a.found">
+          <p>
+            @for (part of citationParts(a.answer); track $index) {
+              @if (part.source && source(a, part.source); as s) {
+                <span class="cite" [title]="s.label">{{ s.id }}</span>
+              } @else {
+                {{ part.text }}
+              }
+            }
+          </p>
+          @if (a.sources.length) {
+            <ul class="sources">
+              @for (s of a.sources; track s.id) {
+                <li><span class="cite">{{ s.id }}</span> {{ kindLabels[s.kind] }} · {{ s.label }}</li>
+              }
+            </ul>
+          }
+        </div>
+      } @else if (m.error) {
+        <div class="bubble answer error" role="alert">{{ m.error }}</div>
+      } @else {
+        <div class="bubble answer pending" aria-busy="true"><span class="dots">L'IA cherche dans le dossier…</span></div>
+      }
+    }
+  </div>
+
+  <form class="composer" (submit)="$event.preventDefault(); ask()">
+    <textarea class="input" rows="2" maxlength="1000" placeholder="Votre question sur ce patient…"
+              aria-label="Votre question" [value]="question()" (input)="question.set($any($event.target).value)"
+              (keydown)="onKey($event)"></textarea>
+    <button type="submit" class="btn btn-primary btn-sm" [disabled]="asking() || !question().trim()">Envoyer</button>
+  </form>
+</dialog>

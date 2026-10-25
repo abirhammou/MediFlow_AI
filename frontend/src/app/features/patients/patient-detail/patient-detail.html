@@ -9,19 +9,31 @@
       <h1>{{ p.lastName }} {{ p.firstName }}</h1>
       <p>{{ genderLabels[p.gender] }} · {{ ageLabel(p.age) }} · né(e) le {{ formatBirthDate(p.dateOfBirth) }}</p>
     </div>
-    @if (perms.canWrite()) {
+    @if (perms.canWrite() || perms.canUseMedicalAi()) {
       <div class="actions">
-        <a class="btn btn-outline btn-sm" [routerLink]="['/patients', p.id, 'edit']">
-          <app-icon name="edit" [size]="16" /> Modifier
-        </a>
-        <button type="button" class="btn btn-danger btn-sm" [disabled]="deleting()" (click)="remove(p)">
-          <app-icon name="trash" [size]="16" /> Supprimer
-        </button>
+        @if (perms.canUseMedicalAi()) {
+          <button type="button" class="btn btn-primary btn-sm" (click)="chat.open()">
+            <app-icon name="chat" [size]="16" /> Poser une question (IA)
+          </button>
+        }
+        @if (perms.canWrite()) {
+          <a class="btn btn-outline btn-sm" [routerLink]="['/patients', p.id, 'edit']">
+            <app-icon name="edit" [size]="16" /> Modifier
+          </a>
+          <button type="button" class="btn btn-danger btn-sm" [disabled]="deleting()" (click)="remove(p)">
+            <app-icon name="trash" [size]="16" /> Supprimer
+          </button>
+        }
       </div>
     }
   </section>
+  <app-patient-chat #chat [patientId]="p.id" />
 
   <app-patient-summary [patientId]="p.id" />
+
+  @if (perms.canUseMedicalAi()) {
+    <app-patient-history [patientId]="p.id" scope="TIMELINE" />
+  }
 
   @if (perms.canReadReports()) {
     <app-patient-reports [patientId]="p.id" />

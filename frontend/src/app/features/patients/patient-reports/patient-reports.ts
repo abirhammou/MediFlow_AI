@@ -5,6 +5,7 @@ import { ReportListItem, ReportOut, ReportStatus, ReportsApi } from '../../../pa
 import { Icon } from '../../../shared/icon/icon';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { formatDateTime } from '../birth-date';
+import { PatientHistoryCard } from '../patient-history/patient-history';
 import { PatientPermissions } from '../patient-permissions';
 
 /** The patient file shows at most this many reports (newest first). */
@@ -35,7 +36,7 @@ export function reportSections(content: string | null): { title: string; body: s
  */
 @Component({
   selector: 'app-patient-reports',
-  imports: [Icon, RouterLink],
+  imports: [Icon, RouterLink, PatientHistoryCard],
   templateUrl: './patient-reports.html',
   styleUrl: './patient-reports.scss',
 })

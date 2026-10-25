@@ -6,7 +6,9 @@ import { Icon } from '../../../shared/icon/icon';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { ageLabel, formatBirthDate, formatDateTime } from '../birth-date';
 import { PatientPermissions } from '../patient-permissions';
+import { PatientChat } from '../patient-chat/patient-chat';
 import { PatientFilesCard } from '../patient-files/patient-files';
+import { PatientHistoryCard } from '../patient-history/patient-history';
 import { PatientReportsCard } from '../patient-reports/patient-reports';
 import { PatientSummaryCard } from '../patient-summary/patient-summary';
 import { GENDER_LABELS, Patient } from '../patient.model';
@@ -14,7 +16,15 @@ import { PatientService } from '../patient.service';
 
 @Component({
   selector: 'app-patient-detail',
-  imports: [RouterLink, Icon, PatientSummaryCard, PatientReportsCard, PatientFilesCard],
+  imports: [
+    RouterLink,
+    Icon,
+    PatientSummaryCard,
+    PatientHistoryCard,
+    PatientReportsCard,
+    PatientFilesCard,
+    PatientChat,
+  ],
   templateUrl: './patient-detail.html',
   styleUrl: './patient-detail.scss',
 })

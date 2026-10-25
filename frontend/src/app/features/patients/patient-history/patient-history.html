@@ -1,0 +1,112 @@
+<section class="history-card" [class.card]="!compact()" [class.compact]="compact()" aria-labelledby="history-title">
+  <header class="head">
+    <h2 id="history-title"><app-icon name="activity" [size]="compact() ? 16 : 18" /> {{ title() }}</h2>
+    @if (perms.canUseMedicalAi() && !loading() && !loadError()) {
+      <button type="button" class="btn btn-sm" [class.btn-primary]="!compact()" [class.btn-outline]="compact()"
+              [disabled]="generating() || busy()" [attr.aria-busy]="generating()" (click)="generate()">
+        @if (generating()) {
+          <span class="spinner" aria-hidden="true"></span> Génération en cours…
+        } @else if (draft() || current()) {
+          <app-icon name="rotate-ccw" [size]="16" /> Régénérer
+        } @else {
+          <app-icon name="zap" [size]="16" /> Générer
+        }
+      </button>
+    }
+  </header>
+
+  @if (!compact()) {
+    <p class="muted scope-hint">À partir des comptes rendus et des documents médicaux uniquement (jamais des documents administratifs).</p>
+  }
+  @if (actionError()) {
+    <div class="alert" role="alert">{{ actionError() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted" aria-busy="true">Chargement…</p>
+  } @else if (loadError()) {
+    <div class="alert" role="alert">{{ loadError() }}</div>
+  } @else {
+    @if (draft(); as d) {
+      <div class="draft">
+        <label class="draft-label" [attr.for]="'history-draft-' + scope()">
+          <app-icon name="alert" [size]="16" /> Brouillon généré par IA — à vérifier avant validation
+        </label>
+        <textarea [id]="'history-draft-' + scope()" class="input" [rows]="compact() ? 8 : 12" maxlength="6000"
+                  [readOnly]="!perms.canReviewMedicalAi()" [value]="draftText()"
+                  (input)="draftText.set($any($event.target).value)"></textarea>
+        <p class="meta">Généré le {{ formatDateTime(d.createdAt) }}@if (d.generatedByName) { par {{ d.generatedByName }} }
+          · Modèle : {{ d.llmModel || '—' }}</p>
+        @if (d.isOutdated) {
+          <p class="outdated" role="status"><app-icon name="alert" [size]="16" /> Le dossier a changé depuis ce brouillon. Régénérez-le avant de le valider.</p>
+        }
+        @if (d.sources.length) {
+          <p class="sources">Sources :
+            @for (s of d.sources; track s.id) { <span class="source" [title]="s.label">[{{ s.id }}] {{ kindLabels[s.kind] }}</span> }
+          </p>
+        }
+        @if (perms.canReviewMedicalAi()) {
+          <div class="actions">
+            <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() || generating() || !draftText().trim()" (click)="validate(d)">Valider</button>
+            <button type="button" class="btn btn-outline btn-sm" [disabled]="busy() || generating() || !dirty() || !draftText().trim()" (click)="save(d)">Enregistrer le brouillon</button>
+            <button type="button" class="btn btn-danger btn-sm" [disabled]="busy() || generating()" (click)="openReject()">Rejeter</button>
+          </div>
+        } @else {
+          <p class="muted hint">La validation est réservée aux médecins.</p>
+        }
+      </div>
+
+      <dialog #rejectDialog class="reject-dialog" aria-labelledby="history-reject-title" (cancel)="closeReject()">
+        <h2 id="history-reject-title">Rejeter le brouillon</h2>
+        <label class="field">
+          <span>Commentaire (obligatoire)</span>
+          <textarea class="input" rows="4" maxlength="1000" [value]="rejectComment()" (input)="rejectComment.set($any($event.target).value)"></textarea>
+        </label>
+        <div class="actions end">
+          <button type="button" class="btn btn-outline btn-sm" (click)="closeReject()">Annuler</button>
+          <button type="button" class="btn btn-danger btn-sm" [disabled]="!rejectComment().trim()" (click)="reject(d)">Rejeter</button>
+        </div>
+      </dialog>
+    }
+
+    @if (current(); as c) {
+      @if (draft()) { <h3 class="sub">Version validée en vigueur</h3> }
+      <div class="validated">
+        <p class="badge validated-badge"><app-icon name="shield" [size]="14" /> Validé
+          @if (c.reviewedByName) { par Dr {{ c.reviewedByName }} }
+          @if (c.reviewedAt) { le {{ formatDateTime(c.reviewedAt) }} }</p>
+        @if (c.isOutdated) {
+          <p class="outdated" role="status"><app-icon name="alert" [size]="16" /> Le dossier a changé depuis cette synthèse</p>
+        }
+        <p class="content">{{ c.content }}</p>
+        @if (c.sources.length) {
+          <p class="sources">Sources :
+            @for (s of c.sources; track s.id) { <span class="source" [title]="s.label">[{{ s.id }}] {{ s.label }}</span> }
+          </p>
+        }
+        <p class="meta">Modèle : {{ c.llmModel || '—' }} · généré le {{ formatDateTime(c.createdAt) }}</p>
+      </div>
+    } @else if (!draft()) {
+      <div class="empty">
+        <strong>Aucune synthèse validée</strong>
+        <span>Générez un brouillon : il devra être relu et validé par un médecin.</span>
+      </div>
+    }
+
+    @if (versions().length > 1) {
+      <details class="versions">
+        <summary>Historique ({{ versions().length }} versions)</summary>
+        <ol>
+          @for (v of versions(); track v.id) {
+            <li>
+              <span class="chip" [attr.data-status]="v.status">{{ statusLabels[v.status] }}</span>
+              {{ formatDateTime(v.createdAt) }}
+              @if (v.generatedByName) { <span class="muted">· {{ v.generatedByName }}</span> }
+              @if (v.reviewComment) { <span class="comment">« {{ v.reviewComment }} »</span> }
+            </li>
+          }
+        </ol>
+      </details>
+    }
+  }
+</section>

@@ -24,6 +24,12 @@ export const REPORT_ROLES = {
   write: ['DOCTOR'],
 } as const satisfies Record<string, readonly Role[]>;
 
+/** Same matrix as HISTORY_ROLES in backend/app/modules/patient_history/router.py. */
+export const HISTORY_ROLES = {
+  use: ['DOCTOR', 'ADMIN'],
+  review: ['DOCTOR'],
+} as const satisfies Record<string, readonly Role[]>;
+
 /** Same matrix as FILE_ROLES in backend/app/modules/patient_files/service.py. */
 export const FILE_ROLES = {
   ADMINISTRATIVE: { read: ['SECRETARY', 'ADMIN', 'PATIENT'], write: ['SECRETARY', 'ADMIN'] },
@@ -63,6 +69,8 @@ export class PatientPermissions {
   readonly canReviewSummary = this.has(SUMMARY_ROLES.review);
   readonly canReadReports = this.has(REPORT_ROLES.read);
   readonly canWriteReports = this.has(REPORT_ROLES.write);
+  readonly canUseMedicalAi = this.has(HISTORY_ROLES.use);
+  readonly canReviewMedicalAi = this.has(HISTORY_ROLES.review);
   readonly readableFileCategories = computed(() => fileCategoriesFor(this.auth.user()?.role, 'read'));
   readonly writableFileCategories = computed(() => fileCategoriesFor(this.auth.user()?.role, 'write'));
 

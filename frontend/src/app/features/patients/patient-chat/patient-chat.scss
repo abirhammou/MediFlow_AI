@@ -1,0 +1,37 @@
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(460px, 100vw); height: 100vh; max-height: 100vh;
+  margin: 0; padding: 0; border: 0; display: none; flex-direction: column; background: #fff; color: var(--ink);
+  box-shadow: -12px 0 40px rgba(15, 31, 61, .2);
+  &[open] { display: flex; }
+  &::backdrop { background: rgba(15, 31, 61, .35); }
+}
+.drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 1.25rem 1.25rem .75rem; border-bottom: 1px solid var(--border);
+  h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 700; }
+  p { margin-top: .35rem; font-size: .78rem; }
+}
+.icon-btn { display: inline-flex; padding: .35rem; border: 0; border-radius: var(--radius-sm); background: none;
+  color: var(--muted); cursor: pointer;
+  &:hover { color: var(--ink); background: #f1f5f9; } }
+
+.thread { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: .6rem; }
+.empty { display: flex; flex-direction: column; gap: .25rem; margin: auto 0; padding: 1.25rem; text-align: center;
+  color: var(--muted); font-size: .85rem; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  strong { color: var(--ink); } }
+
+.bubble { max-width: 90%; padding: .6rem .8rem; border-radius: 12px; font-size: .88rem; line-height: 1.45;
+  white-space: pre-wrap; }
+.question { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+.answer { align-self: flex-start; background: #f1f5f9; border-bottom-left-radius: 4px;
+  &.not-found { background: #fff7ed; color: #9a3412; }
+  &.error { background: #fef2f2; color: #b91c1c; }
+  &.pending { color: var(--muted); font-style: italic; }
+}
+.cite { display: inline-block; margin: 0 .1rem; padding: 0 .35rem; border-radius: 999px; background: #dbeafe;
+  color: #1d4ed8; font-size: .72rem; font-weight: 700; vertical-align: 1px; cursor: help; }
+.sources { list-style: none; margin: .5rem 0 0; padding: .5rem 0 0; border-top: 1px solid #e2e8f0;
+  font-size: .76rem; color: #475569;
+  li { margin-top: .2rem; } }
+
+.composer { display: flex; gap: .5rem; align-items: flex-end; padding: .75rem 1.25rem 1rem;
+  border-top: 1px solid var(--border);
+  textarea { flex: 1; height: auto; padding: .6rem .75rem; resize: none; } }

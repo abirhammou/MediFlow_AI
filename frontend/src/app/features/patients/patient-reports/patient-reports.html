@@ -90,6 +90,10 @@
           <p class="content notes">{{ o.raw_notes }}</p>
         </details>
       }
+      @if (perms.canUseMedicalAi()) {
+        <app-patient-history [patientId]="o.patient_id" scope="REPORT" [reportId]="o.id" [compact]="true" />
+      }
+
       @if (o.warnings.length) {
         <div class="warnings" role="note">
           <strong>Valeurs absentes des notes :</strong>
