@@ -5,6 +5,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from app.modules.appointments.models import Appointment, AppointmentRequest
 from app.modules.auth.models import Counter, RefreshToken, User
+from app.modules.billing.models import Invoice, Payment
 from app.modules.documents.models import DocumentCategory, MedicalDocument
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder
@@ -31,6 +32,8 @@ DOCUMENT_MODELS: list[type[Document]] = [
     Reminder,
     FaqEntry,
     LlmInteraction,
+    Invoice,
+    Payment,
 ]
 
 

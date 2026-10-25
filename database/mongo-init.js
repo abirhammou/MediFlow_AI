@@ -23,6 +23,8 @@ const TASK_STATUS        = ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"];
 const REMINDER_STATUS    = ["DRAFT", "APPROVED", "SENT", "DISCARDED"];
 const LLM_MODULES        = ["APPOINTMENT", "PATIENT_RECORD", "PATIENT_HISTORY", "PATIENT_CHAT", "REPORT", "MEDDOC", "FOLLOWUP", "FAQ"];
 const HISTORY_SCOPES     = ["TIMELINE", "REPORT"];
+const INVOICE_STATUS     = ["DRAFT", "ISSUED", "PARTIAL", "PAID", "CANCELLED"];
+const PAYMENT_METHODS    = ["CASH", "CARD", "TRANSFER", "CHEQUE"];
 const BLOOD_TYPES        = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const FILE_CATEGORIES    = ["ADMINISTRATIVE", "MEDICAL"];
 const FILE_TYPES         = ["INSURANCE", "ACCOUNT", "INVOICE", "BILL", "SCAN", "LAB_RESULT", "IMAGING", "OTHER"];
@@ -429,6 +431,74 @@ faq.createIndex(
   { name: "txt_faq", default_language: "french", weights: { question: 3, answer: 1 } }
 );
 faq.createIndex({ isApproved: 1, category: 1 }, { name: "idx_faq_approved" });
+
+// =====================================================================
+// BILLING — amounts are integers in millimes (1 TND = 1000 millimes)
+// =====================================================================
+const money = (extra = {}) => ({ bsonType: ["int", "long"], ...extra });
+
+// invoices — never deleted: a mistake is CANCELLED (with a reason), a payment refunded
+const invoices = defineCollection(
+  "invoices",
+  ["number", "patientId", "lines", "total", "insuranceShare", "patientShare", "paidAmount", "status", "createdAt", "updatedAt"],
+  {
+    number: str({ pattern: "^FAC-[0-9]{4}-[0-9]{5}$" }),
+    patientId: oid,
+    lines: {
+      bsonType: "array",
+      minItems: 1,
+      maxItems: 50,
+      items: {
+        bsonType: "object",
+        required: ["label", "quantity", "unitPrice"],
+        additionalProperties: false,
+        properties: {
+          label: str({ minLength: 1, maxLength: 200 }),
+          quantity: int({ minimum: 1, maximum: 1000 }),
+          unitPrice: money({ minimum: 0 }),
+        },
+      },
+    },
+    total: money({ minimum: 0 }),
+    insuranceShare: money({ minimum: 0 }),
+    patientShare: money({ minimum: 0, description: "total - insuranceShare, what the patient pays" }),
+    paidAmount: money({ minimum: 0, description: "net of refunds, kept in sync with payments" }),
+    status: oneOf(INVOICE_STATUS),
+    appointmentId: optOid,
+    followupTaskId: optOid,
+    note: optStr({ maxLength: 500 }),
+    issuedAt: optDate,
+    cancelledAt: optDate,
+    cancelledBy: optOid,
+    cancelReason: optStr({ maxLength: 500 }),
+    createdBy: optOid,
+    ...timestamps,
+  }
+);
+invoices.createIndex({ number: 1 }, { unique: true, name: "uq_invoices_number" });
+invoices.createIndex({ patientId: 1, createdAt: -1 }, { name: "idx_invoices_patient" });
+invoices.createIndex({ status: 1, issuedAt: 1 }, { name: "idx_invoices_status" });
+
+// payments — append-only; a refund is a negative payment pointing to the original one
+const payments = defineCollection(
+  "payments",
+  ["invoiceId", "patientId", "amount", "method", "receiptNumber", "refundedAmount", "createdAt"],
+  {
+    invoiceId: oid,
+    patientId: oid,
+    amount: money({ description: "> 0 payment, < 0 refund" }),
+    method: oneOf(PAYMENT_METHODS),
+    receiptNumber: str({ pattern: "^REC-[0-9]{4}-[0-9]{5}$" }),
+    refundOf: { ...optOid, description: "payments._id refunded by this one" },
+    refundedAmount: money({ minimum: 0, description: "already refunded from this payment" }),
+    note: optStr({ maxLength: 500 }),
+    createdBy: optOid,
+    createdAt: date,
+  }
+);
+payments.createIndex({ receiptNumber: 1 }, { unique: true, name: "uq_payments_receipt" });
+payments.createIndex({ invoiceId: 1, createdAt: 1 }, { name: "idx_payments_invoice" });
+payments.createIndex({ createdAt: 1 }, { name: "idx_payments_date" });
 
 // =====================================================================
 // CROSS-CUTTING — LLM call log

@@ -25,6 +25,13 @@ from app.modules.auth.models import (
     User,
 )
 from app.modules.auth.repository import get_user_by_email
+from app.modules.billing.models import (
+    Invoice,
+    InvoiceLine,
+    InvoiceStatus,
+    Payment,
+    PaymentMethod,
+)
 from app.modules.documents.models import DocumentCategory, ExtractedField, MedicalDocument
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder, ReminderStatus, TaskStatus
@@ -80,6 +87,20 @@ MINIMAL: dict[str, Callable[[], Document]] = {
     "patient_summaries": lambda: PatientSummary(patient_id=oid(), content="Patient suivi."),
     "patient_history_summaries": lambda: PatientHistorySummary(
         patient_id=oid(), scope=HistoryScope.TIMELINE, content="Chronologie"
+    ),
+    "invoices": lambda: Invoice(
+        number="FAC-2026-00001",
+        patient_id=oid(),
+        lines=[InvoiceLine(label="Consultation", quantity=1, unit_price=45_000)],
+        total=45_000,
+        patient_share=45_000,
+    ),
+    "payments": lambda: Payment(
+        invoice_id=oid(),
+        patient_id=oid(),
+        amount=45_000,
+        method=PaymentMethod.CASH,
+        receipt_number="REC-2026-00001",
     ),
     "patient_files": lambda: PatientFile(
         patient_id=oid(),
@@ -183,6 +204,38 @@ FULL: dict[str, Callable[[], Document]] = {
         reviewed_by=oid(),
         reviewed_at=START,
         review_comment="Conforme.",
+    ),
+    "invoices": lambda: Invoice(
+        number="FAC-2026-00002",
+        patient_id=oid(),
+        lines=[
+            InvoiceLine(label="Consultation", quantity=1, unit_price=45_000),
+            InvoiceLine(label="ECG", quantity=2, unit_price=12_500),
+        ],
+        total=70_000,
+        insurance_share=49_000,
+        patient_share=21_000,
+        paid_amount=0,
+        status=InvoiceStatus.CANCELLED,
+        appointment_id=oid(),
+        followup_task_id=oid(),
+        note="Prise en charge CNAM 70 %",
+        issued_at=START,
+        cancelled_at=START,
+        cancelled_by=oid(),
+        cancel_reason="Doublon",
+        created_by=oid(),
+    ),
+    "payments": lambda: Payment(
+        invoice_id=oid(),
+        patient_id=oid(),
+        amount=-10_000,
+        method=PaymentMethod.CARD,
+        receipt_number="REC-2026-00002",
+        refund_of=oid(),
+        refunded_amount=0,
+        note="Remboursement partiel",
+        created_by=oid(),
     ),
     "patient_history_summaries": lambda: PatientHistorySummary(
         patient_id=oid(),
@@ -310,7 +363,7 @@ COLLECTIONS = sorted(model.Settings.name for model in DOCUMENT_MODELS)
 
 
 def test_every_collection_has_a_model_and_samples():
-    assert len(COLLECTIONS) == 16
+    assert len(COLLECTIONS) == 18
     assert sorted(MINIMAL) == sorted(FULL) == COLLECTIONS
 
 
