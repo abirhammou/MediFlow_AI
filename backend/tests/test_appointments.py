@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
 
 from app.core.db import DOCUMENT_MODELS
+from app.errors import LLMResponseError
 from app.main import app
 from app.modules.appointments import service as appointment_service
 from app.modules.appointments.models import AppointmentRequest, AppointmentStatus, DayPart
@@ -456,3 +457,37 @@ def test_appointment_status_values_match_the_database_validator():
         "COMPLETED",
         "NO_SHOW",
     }
+
+
+async def test_parse_request_retries_when_the_llm_fails_once(http, staff, monkeypatch):
+    calls = {"n": 0}
+
+    async def flaky_llm(module, system, user, output_schema):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise LLMResponseError()
+        return AppointmentIntent(preferred_date=None, day_part=None, specialty=None, reason=None)
+
+    monkeypatch.setattr(appointment_service, "generate_json", flaky_llm)
+    response = await http.post(
+        "/api/appointments/parse-request",
+        json={"message": "rdv demain"},
+        headers=auth(staff[0]),
+    )
+
+    assert response.status_code == 200
+    assert calls["n"] == 2
+
+
+async def test_parse_request_gives_up_after_three_llm_failures(http, staff, monkeypatch):
+    async def broken_llm(module, system, user, output_schema):
+        raise LLMResponseError()
+
+    monkeypatch.setattr(appointment_service, "generate_json", broken_llm)
+    response = await http.post(
+        "/api/appointments/parse-request",
+        json={"message": "rdv demain"},
+        headers=auth(staff[0]),
+    )
+
+    assert response.status_code == 502

@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService, apiErrorMessage } from '../../core/auth/auth.service';
 import { ConfirmService } from '../../shared/confirm-dialog/confirm.service';
@@ -135,12 +135,14 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
   `,
 })
 export class AppointmentView implements OnInit {
-  readonly mode = input.required<ViewMode>();
-
   private readonly api = inject(AppointmentsApi);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly cdr = inject(ChangeDetectorRef);
+
+  // On initialise le mode à 'patient' par défaut, puis on le met à jour dans ngOnInit
+  readonly mode = signal<ViewMode>('patient');
 
   readonly SIZE = 10;
   readonly statuses: AppointmentStatus[] = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
@@ -167,6 +169,12 @@ export class AppointmentView implements OnInit {
   }[this.mode()]));
 
   ngOnInit(): void {
+    // Récupérer le rôle de l'utilisateur connecté et le mettre à jour
+    const userRole = this.auth.user()?.role?.toLowerCase();
+    if (userRole && ['patient', 'secretary', 'admin', 'doctor'].includes(userRole)) {
+      this.mode.set(userRole as ViewMode);
+      this.cdr.detectChanges(); // Force la mise à jour de la vue
+    }
     this.reload(1);
   }
 

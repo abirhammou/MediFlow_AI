@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException
@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from app.core.pagination import Page
 from app.core.time import utcnow
 from app.dependencies import owns_patient_record
-from app.errors import APIError
+from app.errors import APIError, LLMResponseError, LLMTimeoutError
 from app.llm.service import generate_json
 from app.modules.appointments import repository
 from app.modules.appointments.models import (
@@ -28,6 +28,8 @@ from app.modules.appointments.schemas import (
 )
 from app.modules.appointments.slots import CLINIC_TZ, clinic_day_bounds, compute_free_slots
 from app.modules.auth.models import Role, User
+
+LLM_ATTEMPTS = 3
 
 DEFAULT_DURATION = timedelta(minutes=30)
 MAX_PROPOSED_SLOTS = 20
@@ -179,6 +181,22 @@ class AppointmentService:
 
     # ── LLM ───────────────────────────────────────────────────────────────────
 
+    async def _extract_intent(self, message: str, today: date) -> AppointmentIntent:
+        """Appelle le LLM ; les fournisseurs gratuits échouent parfois ponctuellement, on réessaie."""
+        last_error: APIError | None = None
+        for _ in range(LLM_ATTEMPTS):
+            try:
+                return await generate_json(
+                    module="appointments",
+                    system=SYSTEM_PROMPT,
+                    user=intent_prompt(message, today),
+                    output_schema=AppointmentIntent,
+                )
+            except (LLMResponseError, LLMTimeoutError) as exc:
+                last_error = exc
+        assert last_error is not None
+        raise last_error
+
     async def parse_request(self, body: ParseRequestIn, user: User) -> ParseRequestOut:
         """Transforme un message libre en demande structurée, puis cherche des créneaux réels.
 
@@ -191,12 +209,7 @@ class AppointmentService:
 
         now = utcnow()
         today = now.astimezone(CLINIC_TZ).date()
-        intent = await generate_json(
-            module="appointments",
-            system=SYSTEM_PROMPT,
-            user=intent_prompt(body.message, today),
-            output_schema=AppointmentIntent,
-        )
+        intent = await self._extract_intent(body.message, today)
 
         request = await self.repo.insert_request(
             AppointmentRequest(
