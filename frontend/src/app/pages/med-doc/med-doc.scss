@@ -94,6 +94,7 @@ textarea { resize: vertical; line-height: 1.55; }
   &[data-status='DRAFT'] { background: #ffedd5; color: #c2410c; }
   &[data-status='VALIDATED'] { background: #dcfce7; color: #166534; }
   &[data-status='REJECTED'] { background: #fee2e2; color: #b91c1c; }
+  &[data-status='ARCHIVED'] { background: #e2e8f0; color: #475569; }
 }
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-export type DocumentStatus = 'DRAFT' | 'VALIDATED' | 'REJECTED';
+export type DocumentStatus = 'DRAFT' | 'VALIDATED' | 'REJECTED' | 'ARCHIVED';
 
 export interface ExtractedField {
   name: string;
@@ -20,6 +20,7 @@ export interface DocumentListItem {
   ai_suggested_category_code: string | null;
   extracted_fields: ExtractedField[];
   status: DocumentStatus;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +76,11 @@ export class MedDocApi {
     let params = new HttpParams().set('page', page).set('size', size);
     if (patientId.trim()) params = params.set('patient_id', patientId.trim());
     return this.http.get<DocumentPage>(`${this.base}/`, { params });
+  }
+
+  history(patientId: string, page = 1, size = 100): Observable<DocumentPage> {
+    const params = new HttpParams().set('page', page).set('size', size);
+    return this.http.get<DocumentPage>(`${this.base}/patients/${patientId}/history`, { params });
   }
 
   get(id: string): Observable<MedicalDocument> {

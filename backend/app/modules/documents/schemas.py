@@ -1,3 +1,5 @@
+from enum import Enum
+
 from beanie import PydanticObjectId
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
@@ -10,6 +12,13 @@ class DocumentCreate(BaseModel):
     patient_id: PydanticObjectId
     title: str = Field(min_length=1, max_length=200)
     raw_text: str = Field(min_length=1)
+
+
+class DocumentStatus(str, Enum):
+    DRAFT = "DRAFT"
+    VALIDATED = "VALIDATED"
+    REJECTED = "REJECTED"
+    ARCHIVED = "ARCHIVED"
 
 
 class DocumentUpdate(BaseModel):
@@ -34,7 +43,8 @@ class DocumentListItem(BaseModel):
     category_code: str | None
     ai_suggested_category_code: str | None
     extracted_fields: list[ExtractedFieldOut]
-    status: AiReviewStatus
+    status: DocumentStatus
+    archived_at: AwareDatetime | None
     created_at: AwareDatetime
     updated_at: AwareDatetime
 

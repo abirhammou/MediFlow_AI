@@ -107,7 +107,7 @@ async def test_document_routes_require_authentication(api_client):
     assert (await api_client.post("/api/documents", json={})).status_code == 401
 
 
-@pytest.mark.parametrize("role", [Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN])
+@pytest.mark.parametrize("role", [Role.DOCTOR, Role.SECRETARY, Role.ADMIN])
 async def test_staff_roles_can_create_documents(api_client, user_factory, auth, role):
     user = await user_factory(email=f"meddoc-create-{role.value.lower()}@example.test", role=role)
     response = await api_client.post(
@@ -124,6 +124,12 @@ async def test_staff_roles_can_create_documents(api_client, user_factory, auth, 
     assert response.json()["status"] == "DRAFT"
     assert response.json()["uploaded_by"] == str(user.id)
     assert response.json()["extracted_fields"] == []
+    assert (await api_client.get(f"/api/documents/{response.json()['id']}", headers=auth(user))).status_code == 200
+
+
+async def test_admin_staff_is_not_authorized_for_med_documents(api_client, admin_staff, auth):
+    response = await api_client.get("/api/documents/", headers=auth(admin_staff))
+    assert response.status_code == 403
 
 
 async def test_patient_cannot_create_or_modify_documents(api_client, patient, auth):
@@ -177,6 +183,14 @@ async def test_patient_list_is_server_filtered_to_own_validated_documents(
         own["id"],
         [ExtractedField(name="hemoglobin", value="13 g/dL", status=AiReviewStatus.VALIDATED)],
     )
+    archived = await create_document(doctor, patient_id=str(patient.patient_id))
+    await _set_fields(
+        archived["id"],
+        [ExtractedField(name="hemoglobin", value="13 g/dL", status=AiReviewStatus.VALIDATED)],
+    )
+    assert (
+        await api_client.delete(f"/api/documents/{archived['id']}", headers=auth(doctor))
+    ).status_code == 204
     draft = await create_document(doctor, patient_id=str(patient.patient_id))
     await _set_fields(
         draft["id"],
@@ -195,6 +209,10 @@ async def test_patient_list_is_server_filtered_to_own_validated_documents(
     assert response.status_code == 200
     assert [item["id"] for item in response.json()["items"]] == [own["id"]]
     assert response.json()["items"][0]["status"] == "VALIDATED"
+    archived_detail = await api_client.get(
+        f"/api/documents/{archived['id']}", headers=auth(patient)
+    )
+    assert archived_detail.status_code == 404
 
 
 async def test_patient_without_linked_record_sees_empty_list(api_client, user_factory, auth):
@@ -251,27 +269,79 @@ async def test_updating_source_text_clears_extracted_data_and_category(
     assert response.json()["extracted_fields"] == []
     assert response.json()["category_code"] is None
     assert response.json()["ai_suggested_category_code"] is None
+    assert response.json()["status"] == "DRAFT"
 
 
-async def test_only_admin_can_delete_documents(
-    api_client, doctor, admin, auth, create_document
+async def test_doctor_and_admin_archive_documents_logically(
+    api_client, doctor, admin, secretary, auth, create_document, db
 ):
-    forbidden_doc = await create_document(doctor)
-    forbidden = await api_client.delete(
-        f"/api/documents/{forbidden_doc['id']}", headers=auth(doctor)
+    doctor_doc = await create_document(doctor)
+    secretary_forbidden = await api_client.delete(
+        f"/api/documents/{doctor_doc['id']}", headers=auth(secretary)
     )
-    assert forbidden.status_code == 403
+    assert secretary_forbidden.status_code == 403
 
-    deletable_doc = await create_document(doctor)
-    deleted = await api_client.delete(
-        f"/api/documents/{deletable_doc['id']}", headers=auth(admin)
+    archived_by_doctor = await api_client.delete(
+        f"/api/documents/{doctor_doc['id']}", headers=auth(doctor)
     )
-    missing = await api_client.get(
-        f"/api/documents/{deletable_doc['id']}", headers=auth(admin)
-    )
+    stored_doctor_doc = await db.medical_documents.find_one({"_id": PydanticObjectId(doctor_doc["id"])})
 
-    assert deleted.status_code == 204
-    assert missing.status_code == 404
+    admin_doc = await create_document(doctor)
+    archived_by_admin = await api_client.delete(
+        f"/api/documents/{admin_doc['id']}", headers=auth(admin)
+    )
+    stored_admin_doc = await db.medical_documents.find_one({"_id": PydanticObjectId(admin_doc["id"])})
+
+    assert archived_by_doctor.status_code == 204
+    assert archived_by_admin.status_code == 204
+    assert stored_doctor_doc is not None and stored_doctor_doc["archivedAt"] is not None
+    assert stored_admin_doc is not None and stored_admin_doc["archivedAt"] is not None
+    active_list = await api_client.get(
+        f"/api/documents/?patient_id={doctor_doc['patient_id']}", headers=auth(doctor)
+    )
+    patient_history = await api_client.get(
+        f"/api/documents/patients/{doctor_doc['patient_id']}/history", headers=auth(doctor)
+    )
+    assert doctor_doc["id"] not in [item["id"] for item in active_list.json()["items"]]
+    assert patient_history.json()["items"][0]["id"] == doctor_doc["id"]
+    assert patient_history.json()["items"][0]["status"] == "ARCHIVED"
+
+
+async def test_secretary_cannot_update_document(
+    api_client, doctor, secretary, auth, create_document
+):
+    document = await create_document(doctor)
+    response = await api_client.patch(
+        f"/api/documents/{document['id']}",
+        headers=auth(secretary),
+        json={"title": "Titre modifié"},
+    )
+    assert response.status_code == 403
+
+
+async def test_patient_history_is_own_validated_documents_only(
+    api_client, patient, doctor, auth, create_document
+):
+    own = await create_document(doctor, patient_id=str(patient.patient_id))
+    await _set_fields(
+        own["id"],
+        [ExtractedField(name="result", value="normal", status=AiReviewStatus.VALIDATED)],
+    )
+    foreign = await create_document(doctor)
+    await _set_fields(
+        foreign["id"],
+        [ExtractedField(name="result", value="normal", status=AiReviewStatus.VALIDATED)],
+    )
+    own_history = await api_client.get(
+        f"/api/documents/patients/{patient.patient_id}/history", headers=auth(patient)
+    )
+    foreign_history = await api_client.get(
+        f"/api/documents/patients/{foreign['patient_id']}/history", headers=auth(patient)
+    )
+    assert own_history.status_code == 200
+    assert [item["id"] for item in own_history.json()["items"]] == [own["id"]]
+    assert foreign_history.status_code == 200
+    assert foreign_history.json()["items"] == []
 
 
 class FakeDocumentRepository:
@@ -307,6 +377,7 @@ def _service_document() -> SimpleNamespace:
         category_code=None,
         ai_suggested_category_code=None,
         extracted_fields=[],
+        archived_at=None,
         created_at=utcnow(),
         updated_at=utcnow(),
         file_path=None,

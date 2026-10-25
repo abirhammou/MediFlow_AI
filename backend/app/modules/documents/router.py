@@ -15,15 +15,9 @@ from app.modules.documents.service import DocumentService
 router = APIRouter()
 TAGS = ["documents"]
 
-readers = require_roles(
-    Role.PATIENT,
-    Role.DOCTOR,
-    Role.SECRETARY,
-    Role.ADMIN_STAFF,
-    Role.ADMIN,
-)
-staff = require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN)
-admin_only = require_roles(Role.ADMIN)
+readers = require_roles(Role.PATIENT, Role.DOCTOR, Role.SECRETARY, Role.ADMIN)
+creators = require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN)
+editors = require_roles(Role.DOCTOR, Role.ADMIN)
 reviewers = require_roles(Role.DOCTOR, Role.ADMIN)
 
 
@@ -42,10 +36,21 @@ async def list_documents(
     return await service.list(user, patient_id=patient_id, page=page, size=size)
 
 
+@router.get("/patients/{patient_id}/history", response_model=DocumentPage)
+async def patient_document_history(
+    patient_id: str,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+    user: User = Depends(readers),
+    service: DocumentService = Depends(get_document_service),
+) -> DocumentPage:
+    return await service.history(user, patient_id=patient_id, page=page, size=size)
+
+
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def create_document(
     data: DocumentCreate,
-    user: User = Depends(staff),
+    user: User = Depends(creators),
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentOut:
     return await service.create(user, data)
@@ -64,7 +69,7 @@ async def get_document(
 async def update_document(
     document_id: str,
     data: DocumentUpdate,
-    user: User = Depends(staff),
+    user: User = Depends(editors),
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentOut:
     return await service.update(user, document_id, data)
@@ -73,7 +78,7 @@ async def update_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: str,
-    user: User = Depends(admin_only),
+    user: User = Depends(editors),
     service: DocumentService = Depends(get_document_service),
 ) -> Response:
     await service.delete(user, document_id)
@@ -83,7 +88,7 @@ async def delete_document(
 @router.post("/{document_id}/extract", response_model=DocumentExtraction)
 async def extract_document(
     document_id: str,
-    user: User = Depends(staff),
+    user: User = Depends(editors),
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentExtraction:
     return await service.extract(user, document_id)

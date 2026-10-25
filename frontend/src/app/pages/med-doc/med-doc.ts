@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { of, switchMap, throwError } from 'rxjs';
 import { apiErrorMessage, AuthService } from '../../core/auth/auth.service';
 import { Icon } from '../../shared/icon/icon';
@@ -34,7 +35,7 @@ interface ReviewField {
           <h1>MedDoc AI</h1>
           <p>Documents médicaux et extraction assistée</p>
         </div>
-        @if (canWrite()) {
+        @if (canCreate()) {
           <button type="button" class="btn primary new-button" (click)="newDocument()">+ Nouveau document</button>
         }
       </div>
@@ -88,20 +89,20 @@ interface ReviewField {
                 <span class="status" [attr.data-status]="document.status">{{ statusLabel(document.status) }}</span>
               }
             </div>
-            @if (current() && canDelete()) {
-              <button type="button" class="btn danger" [disabled]="busy() !== null" (click)="remove()">Supprimer</button>
+            @if (current() && canArchive()) {
+              <button type="button" class="btn danger" [disabled]="busy() !== null" (click)="remove()">Archiver</button>
             }
           </div>
 
           @if (createMode() || current()) {
             <label class="field">
               <span>Titre</span>
-              <input [(ngModel)]="title" [disabled]="!canWrite() || busy() !== null" maxlength="200" />
+              <input [(ngModel)]="title" [disabled]="!canEditForm() || busy() !== null" maxlength="200" />
             </label>
             @if (createMode()) {
               <label class="field">
                 <span>ID du dossier patient</span>
-                <input [(ngModel)]="patientId" [disabled]="busy() !== null" placeholder="ObjectId du dossier patient" />
+                <input [(ngModel)]="patientId" [disabled]="!canCreate() || busy() !== null" placeholder="ObjectId du dossier patient" />
               </label>
             } @else if (current(); as document) {
               <label class="field">
@@ -111,7 +112,7 @@ interface ReviewField {
             }
             <label class="field">
               <span>Texte brut du document</span>
-              <textarea [(ngModel)]="rawText" [disabled]="!canWrite() || busy() !== null" rows="8"></textarea>
+              <textarea [(ngModel)]="rawText" [disabled]="!canEditForm() || busy() !== null" rows="8"></textarea>
             </label>
 
             @if (current(); as document) {
@@ -136,12 +137,12 @@ interface ReviewField {
               }
             }
 
-            @if (canWrite()) {
+            @if (createMode() ? canCreate() : canUpdate()) {
               <div class="actions">
                 <button type="button" class="btn primary" [disabled]="busy() !== null" (click)="save()">
                   {{ busy() === 'save' ? 'Enregistrement…' : 'Enregistrer' }}
                 </button>
-                @if (current()) {
+                @if (current() && canExtract()) {
                   <button type="button" class="btn" [disabled]="busy() !== null" (click)="extract()">
                     {{ busy() === 'extract' ? 'Extraction…' : '✨ Extraire avec l’IA' }}
                   </button>
@@ -203,11 +204,29 @@ interface ReviewField {
 export class MedDoc {
   private readonly api = inject(MedDocApi);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly role = computed(() => this.auth.user()?.role ?? null);
   readonly isPatient = computed(() => this.role() === 'PATIENT');
-  readonly canWrite = computed(() => ['DOCTOR', 'SECRETARY', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? ''));
-  readonly canDelete = computed(() => this.role() === 'ADMIN');
+  readonly canCreate = computed(() => ['DOCTOR', 'SECRETARY', 'ADMIN'].includes(this.role() ?? ''));
+  readonly canUpdate = computed(
+    () =>
+      ['DOCTOR', 'ADMIN'].includes(this.role() ?? '') &&
+      !this.current()?.archived_at,
+  );
+  readonly canEditForm = computed(() =>
+    this.createMode() ? this.canCreate() : this.canUpdate(),
+  );
+  readonly canExtract = computed(
+    () =>
+      ['DOCTOR', 'ADMIN'].includes(this.role() ?? '') &&
+      !this.current()?.archived_at,
+  );
+  readonly canArchive = computed(
+    () =>
+      ['DOCTOR', 'ADMIN'].includes(this.role() ?? '') &&
+      !this.current()?.archived_at,
+  );
   readonly canReview = computed(() => ['DOCTOR', 'ADMIN'].includes(this.role() ?? ''));
 
   readonly documents = signal<DocumentListItem[]>([]);
@@ -228,6 +247,7 @@ export class MedDoc {
   reviewCategory = '';
 
   constructor() {
+    this.patientFilter = this.route.snapshot.queryParamMap.get('patient_id') ?? '';
     if (!this.auth.user()) {
       this.auth.loadProfile().subscribe({
         next: () => this.refresh(),
@@ -239,7 +259,12 @@ export class MedDoc {
   }
 
   statusLabel(status: DocumentStatus): string {
-    return { DRAFT: 'Brouillon', VALIDATED: 'Validé', REJECTED: 'Rejeté' }[status];
+    return {
+      DRAFT: 'Brouillon',
+      VALIDATED: 'Validé',
+      REJECTED: 'Rejeté',
+      ARCHIVED: 'Archivé',
+    }[status];
   }
 
   newDocument(): void {
@@ -334,7 +359,7 @@ export class MedDoc {
 
   remove(): void {
     const document = this.current();
-    if (!document || !confirm(`Supprimer définitivement « ${document.title} » ?`)) return;
+    if (!document || !confirm(`Archiver « ${document.title} » ?`)) return;
     this.start('delete');
     this.api.delete(document.id).subscribe({
       next: () => {
@@ -342,7 +367,7 @@ export class MedDoc {
         this.createMode.set(false);
         this.clearProposal();
         this.busy.set(null);
-        this.info.set('Document supprimé.');
+        this.info.set('Document archivé.');
         this.refresh();
       },
       error: (e: unknown) => this.fail(e),
@@ -372,7 +397,12 @@ export class MedDoc {
   private refresh(): void {
     if (!this.role()) return;
     this.loading.set(true);
-    this.api.list(this.isPatient() ? '' : this.patientFilter).subscribe({
+    const patientId = this.patientFilter.trim();
+    const request =
+      patientId && !this.isPatient()
+        ? this.api.history(patientId)
+        : this.api.list(this.isPatient() ? '' : patientId);
+    request.subscribe({
       next: (page) => {
         this.documents.set(page.items);
         this.pageTotal.set(page.total);

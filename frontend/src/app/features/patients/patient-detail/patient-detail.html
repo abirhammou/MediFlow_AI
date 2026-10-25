@@ -9,6 +9,9 @@
       <h1>{{ p.lastName }} {{ p.firstName }}</h1>
       <p>{{ genderLabels[p.gender] }} · {{ ageLabel(p.age) }} · né(e) le {{ formatBirthDate(p.dateOfBirth) }}</p>
     </div>
+    <a class="btn btn-outline btn-sm" [routerLink]="['/med-doc']" [queryParams]="{ patient_id: p.id }">
+      <app-icon name="file-plus" [size]="16" /> Dossiers médicaux
+    </a>
     @if (perms.canWrite()) {
       <div class="actions">
         <a class="btn btn-outline btn-sm" [routerLink]="['/patients', p.id, 'edit']">

@@ -17,6 +17,7 @@ from app.modules.documents.schemas import (
     DocumentOut,
     DocumentPage,
     DocumentReview,
+    DocumentStatus,
     DocumentUpdate,
     ExtractedFieldOut,
     ExtractedFieldProposal,
@@ -25,7 +26,6 @@ from app.modules.documents.schemas import (
 STAFF_ROLES = {
     Role.DOCTOR,
     Role.SECRETARY,
-    Role.ADMIN_STAFF,
     Role.ADMIN,
 }
 
@@ -36,6 +36,12 @@ def document_status(fields: list[ExtractedField]) -> AiReviewStatus:
     if fields and all(field.status == AiReviewStatus.VALIDATED for field in fields):
         return AiReviewStatus.VALIDATED
     return AiReviewStatus.DRAFT
+
+
+def _document_status(document: MedicalDocument) -> DocumentStatus:
+    if document.archived_at is not None:
+        return DocumentStatus.ARCHIVED
+    return DocumentStatus(document_status(document.extracted_fields).value)
 
 
 def _not_found() -> APIError:
@@ -59,7 +65,8 @@ def _to_list_item(document: MedicalDocument) -> DocumentListItem:
             )
             for field in document.extracted_fields
         ],
-        status=document_status(document.extracted_fields),
+        status=_document_status(document),
+        archived_at=document.archived_at,
         created_at=document.created_at,
         updated_at=document.updated_at,
     )
@@ -114,6 +121,41 @@ class DocumentService:
             size=size,
         )
 
+    async def history(
+        self,
+        user: User,
+        *,
+        patient_id: str,
+        page: int,
+        size: int,
+    ) -> DocumentPage:
+        if user.role == Role.PATIENT:
+            if user.patient_id is None:
+                return DocumentPage(items=[], total=0, page=page, size=size)
+            requested_patient_id = self._parse_patient_id(patient_id)
+            if requested_patient_id != user.patient_id:
+                return DocumentPage(items=[], total=0, page=page, size=size)
+            patient_oid = user.patient_id
+            validated_only = True
+        else:
+            self._require_staff(user)
+            patient_oid = self._parse_patient_id(patient_id)
+            validated_only = False
+
+        documents, total = await self.repository.search(
+            patient_id=patient_oid,
+            validated_only=validated_only,
+            include_archived=user.role != Role.PATIENT,
+            page=page,
+            size=size,
+        )
+        return DocumentPage(
+            items=[_to_list_item(document) for document in documents],
+            total=total,
+            page=page,
+            size=size,
+        )
+
     async def get(self, user: User, document_id: str) -> DocumentOut:
         document_oid = self._parse_document_id(document_id)
         if user.role == Role.PATIENT:
@@ -140,34 +182,43 @@ class DocumentService:
     async def update(
         self, user: User, document_id: str, data: DocumentUpdate
     ) -> DocumentOut:
-        self._require_staff(user)
+        if user.role not in {Role.DOCTOR, Role.ADMIN}:
+            raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
+        if document.archived_at is not None:
+            raise APIError(409, "document_archived", "Un document archivé ne peut pas être modifié.")
         changes = data.model_dump(exclude_unset=True)
         if not changes:
             raise APIError(422, "empty_update", "Aucune modification fournie.")
         if any(value is None for value in changes.values()):
             raise APIError(422, "invalid_update", "Les champs fournis ne peuvent pas être nuls.")
 
-        raw_text_changed = (
-            "raw_text" in changes and changes["raw_text"] != document.raw_text
+        content_changed = any(
+            field in changes and changes[field] != getattr(document, field)
+            for field in ("title", "raw_text")
         )
         for field, value in changes.items():
             setattr(document, field, value)
-        if raw_text_changed:
+        if content_changed:
             document.category_code = None
             document.ai_suggested_category_code = None
             document.extracted_fields = []
         return _to_out(await self.repository.save(document))
 
     async def delete(self, user: User, document_id: str) -> None:
-        if user.role != Role.ADMIN:
+        if user.role not in {Role.DOCTOR, Role.ADMIN}:
             raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
-        await self.repository.delete(document)
+        if document.archived_at is not None:
+            raise APIError(409, "document_already_archived", "Le document est déjà archivé.")
+        document.archived_at = utcnow()
+        await self.repository.save(document)
 
     async def extract(self, user: User, document_id: str) -> DocumentExtraction:
-        self._require_staff(user)
+        if user.role not in {Role.DOCTOR, Role.ADMIN}:
+            raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
+        self._ensure_active(document)
         if not document.raw_text.strip():
             raise APIError(422, "empty_document_text", "Le document ne contient pas de texte.")
 
@@ -203,6 +254,7 @@ class DocumentService:
         if user.role not in {Role.DOCTOR, Role.ADMIN}:
             raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
+        self._ensure_active(document)
 
         reviewed_fields = [
             ExtractedField(name=field.name, value=field.value)
@@ -245,6 +297,11 @@ class DocumentService:
         if document is None:
             raise _not_found()
         return document
+
+    @staticmethod
+    def _ensure_active(document: MedicalDocument) -> None:
+        if document.archived_at is not None:
+            raise APIError(409, "document_archived", "Un document archivé ne peut plus être modifié.")
 
     @staticmethod
     def _parse_document_id(document_id: str) -> PydanticObjectId:

@@ -30,6 +30,7 @@ class MedicalDocument(TimestampedDocument):
     title: str = Field(max_length=200)
     raw_text: str
     file_path: str | None = None
+    archived_at: AwareDatetime | None = None
     category_code: str | None = Field(
         default=None, description="validated document_categories.code"
     )
