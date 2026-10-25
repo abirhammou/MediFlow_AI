@@ -14,17 +14,29 @@ from app.errors import APIError
 from app.modules.follow_up.exporters import generate_docx, generate_email_html, generate_pdf
 from app.modules.follow_up.repository import ReminderRepository, TaskRepository
 from app.modules.follow_up.schemas import (
+    AdaptiveToneRequest,
+    AdaptiveReminderDraft,
+    LostPatientsResponse,
+    NoShowPrediction,
+    NoShowRequest,
+    PatientSummaryRequest,
+    PatientHistorySummary,
+    PriorityResponse,
     ReminderDraft,
     ReminderRequest,
     ReminderStep,
     SavedReminderCreate,
     SavedReminderOut,
     SavedReminderUpdate,
+    ScheduleRequest,
+    ScheduleResponse,
     TaskCreate,
     TaskOut,
     TaskStats,
     TaskStatus,
     TaskUpdate,
+    WeeklyReport,
+    WeeklyReportRequest,
 )
 from app.modules.follow_up.service import TaskService
 
@@ -77,6 +89,15 @@ async def get_stats(service: TaskService = Depends(get_task_service)) -> TaskSta
     return await service.stats()
 
 
+@router.get("/tasks/by-patient/{patient_id}", response_model=list[TaskOut])
+async def list_tasks_by_patient(
+    patient_id: str,
+    service: TaskService = Depends(get_task_service),
+) -> list[TaskOut]:
+    """Lister toutes les tâches de suivi d'un patient donné."""
+    return await service.list_by_patient(patient_id)
+
+
 @router.get("/tasks", response_model=list[TaskOut])
 async def list_tasks(
     task_status: Optional[TaskStatus] = Query(default=None, alias="status"),
@@ -111,6 +132,70 @@ async def generate_reminder(
 ) -> ReminderDraft:
     """Génère un brouillon via Gemini. Garde-fou : données du RDV uniquement."""
     return await service.generate_reminder(request)
+
+
+@router.post("/tasks/prioritize", response_model=PriorityResponse)
+async def prioritize_tasks(
+    service: TaskService = Depends(get_task_service),
+) -> PriorityResponse:
+    """Gemini classe les tâches pending par priorité (HIGH/MEDIUM/LOW)."""
+    return await service.prioritize_tasks()
+
+
+# ── IA Avancée ─────────────────────────────────────────────────────────────────
+
+@router.post("/ai/patient-summary", response_model=PatientHistorySummary)
+async def patient_history_summary(
+    req: PatientSummaryRequest,
+    service: TaskService = Depends(get_task_service),
+) -> PatientHistorySummary:
+    """🧠 Résumé de l'historique de suivi d'un patient en 2-3 phrases."""
+    return await service.patient_history_summary(req)
+
+
+@router.post("/ai/no-show", response_model=NoShowPrediction)
+async def predict_no_show(
+    req: NoShowRequest,
+    service: TaskService = Depends(get_task_service),
+) -> NoShowPrediction:
+    """🔮 Prédit la probabilité de non-présentation d'un patient avec recommandation."""
+    return await service.predict_no_show(req)
+
+
+@router.post("/ai/schedule", response_model=ScheduleResponse)
+async def schedule_reminders(
+    req: ScheduleRequest,
+    service: TaskService = Depends(get_task_service),
+) -> ScheduleResponse:
+    """📅 Génère un calendrier optimisé des rappels pour une période donnée."""
+    return await service.schedule_reminders(req)
+
+
+@router.post("/ai/adaptive-reminder", response_model=AdaptiveReminderDraft)
+async def adaptive_reminder(
+    req: AdaptiveToneRequest,
+    service: TaskService = Depends(get_task_service),
+) -> AdaptiveReminderDraft:
+    """💬 Génère un rappel avec le ton adapté au profil du patient (formel/chaleureux/urgent)."""
+    return await service.adaptive_reminder(req)
+
+
+@router.post("/ai/lost-patients", response_model=LostPatientsResponse)
+async def detect_lost_patients(
+    inactivity_days: int = Query(default=30, ge=7, le=365, description="Jours sans activité"),
+    service: TaskService = Depends(get_task_service),
+) -> LostPatientsResponse:
+    """🔁 Détecte les patients sans activité depuis X jours et génère des messages de reprise."""
+    return await service.detect_lost_patients(inactivity_days)
+
+
+@router.post("/ai/weekly-report", response_model=WeeklyReport)
+async def weekly_report(
+    req: WeeklyReportRequest,
+    service: TaskService = Depends(get_task_service),
+) -> WeeklyReport:
+    """📊 Génère un rapport narratif hebdomadaire avec tendances et recommandations."""
+    return await service.weekly_report(req)
 
 
 # ── Rappels sauvegardés — CRUD ────────────────────────────────────────────────

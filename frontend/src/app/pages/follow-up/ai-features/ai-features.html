@@ -1,0 +1,316 @@
+<div class="ai-page">
+
+  <!-- ── Header ── -->
+  <div class="ai-header">
+    <div class="ai-icon"><app-icon name="zap" [size]="22" /></div>
+    <div>
+      <h2>IA Avancée — FollowUp AI</h2>
+      <p>6 fonctionnalités Gemini pour optimiser le suivi administratif des patients</p>
+    </div>
+  </div>
+
+  <!-- ── Feature tabs ── -->
+  <div class="feature-tabs">
+    @for (f of features; track f.key) {
+      <button class="feature-tab" [class.active]="activeFeature() === f.key"
+              (click)="activeFeature.set(f.key)"
+              [style.--fc]="f.color">
+        <span class="ft-label">{{ f.label }}</span>
+        <span class="ft-desc">{{ f.desc }}</span>
+        @if (isLoading(f.key)) { <span class="ft-spinner"></span> }
+      </button>
+    }
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       1. RÉSUMÉ PATIENT
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'summary') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="file-text" [size]="20" style="color:#3b82f6" />
+        <div>
+          <h3>🧠 Résumé de l'historique patient</h3>
+          <p>Gemini lit toutes les tâches passées du patient et génère un résumé administratif en 2-3 phrases.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Patient <span class="req">*</span></label>
+          <select class="input" (change)="onSummaryPatient($any($event.target).value)">
+            <option value="" disabled selected>Sélectionner un patient</option>
+            @for (p of allPatients(); track p.id) {
+              <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
+            }
+          </select>
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runSummary()" [disabled]="summaryLoading() || !summaryForm.value.patient_id">
+          @if (summaryLoading()) { <app-icon name="activity" [size]="15" /> Analyse… } @else { <app-icon name="zap" [size]="15" /> Analyser }
+        </button>
+      </div>
+      @if (summaryError()) { <div class="alert">{{ summaryError() }}</div> }
+      @if (summaryResult(); as r) {
+        <div class="result-box blue">
+          <div class="result-tag"><app-icon name="file-text" [size]="13" /> Résumé IA</div>
+          <p class="result-main">{{ r.summary }}</p>
+          <div class="result-meta">
+            <span><app-icon name="activity" [size]="12" /> {{ r.task_count }} tâches enregistrées</span>
+            @if (r.last_activity) { <span><app-icon name="calendar" [size]="12" /> Dernière activité : {{ r.last_activity }}</span> }
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       2. NO-SHOW
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'noshow') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="eye" [size]="20" style="color:#ef4444" />
+        <div>
+          <h3>🔮 Prédiction de non-présentation</h3>
+          <p>Gemini analyse les patterns du patient et prédit la probabilité de no-show avec une recommandation concrète.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Patient <span class="req">*</span></label>
+          <select class="input" (change)="onNoshowPatient($any($event.target).value)">
+            <option value="" disabled selected>Sélectionner un patient</option>
+            @for (p of allPatients(); track p.id) {
+              <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Prochain RDV <span class="req">*</span></label>
+          <input class="input" type="date" [formControl]="$any(noshowForm.get('next_appointment'))" />
+        </div>
+        <div class="field">
+          <label>Motif <span class="req">*</span></label>
+          <input class="input" placeholder="Consultation générale" [formControl]="$any(noshowForm.get('next_reason'))" />
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runNoshow()" [disabled]="noshowLoading() || noshowForm.invalid">
+          @if (noshowLoading()) { Analyse… } @else { <app-icon name="zap" [size]="15" /> Prédire }
+        </button>
+      </div>
+      @if (noshowError()) { <div class="alert">{{ noshowError() }}</div> }
+      @if (noshowResult(); as r) {
+        <div class="result-box" [style.border-color]="noshowColor(r.probability)" [style.background]="noshowBg(r.probability) + '44'">
+          <div class="noshow-top">
+            <span class="noshow-badge" [style.background]="noshowBg(r.probability)" [style.color]="noshowColor(r.probability)">
+              {{ noshowLabel(r.probability) }}
+            </span>
+            <strong>{{ r.patient_name }}</strong>
+          </div>
+          <p class="result-main">{{ r.justification }}</p>
+          <div class="recommendation-box">
+            <app-icon name="shield" [size]="14" />
+            <span>{{ r.recommendation }}</span>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       3. PLANIFICATION
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'schedule') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="calendar" [size]="20" style="color:#8b5cf6" />
+        <div>
+          <h3>📅 Planification automatique des rappels</h3>
+          <p>Gemini propose un calendrier optimisé pour toutes les tâches en attente sur la période choisie.</p>
+        </div>
+      </div>
+      <div class="form-row" [formGroup]="scheduleForm">
+        <div class="field">
+          <label>Date de début <span class="req">*</span></label>
+          <input class="input" type="date" formControlName="start_date" />
+        </div>
+        <div class="field">
+          <label>Date de fin <span class="req">*</span></label>
+          <input class="input" type="date" formControlName="end_date" />
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runSchedule()" [disabled]="scheduleLoading() || scheduleForm.invalid">
+          @if (scheduleLoading()) { Planification… } @else { <app-icon name="zap" [size]="15" /> Planifier }
+        </button>
+      </div>
+      @if (scheduleError()) { <div class="alert">{{ scheduleError() }}</div> }
+      @if (scheduleResult().length > 0) {
+        <div class="schedule-grid">
+          @for (c of scheduleResult(); track c.task_id) {
+            <div class="schedule-card" [style.border-top-color]="slotColor(c.time_slot)">
+              <div class="sc-top">
+                <span class="sc-day">{{ c.suggested_day }}</span>
+                <span class="sc-slot" [style.background]="slotColor(c.time_slot)">{{ c.time_slot }}</span>
+              </div>
+              <p class="sc-patient"><app-icon name="user" [size]="12" /> {{ c.patient_name }}</p>
+              <p class="sc-reason">{{ c.reason }}</p>
+            </div>
+          }
+        </div>
+      }
+      @if (scheduleResult().length === 0 && !scheduleLoading() && scheduleError() === null && scheduleForm.touched) {
+        <div class="empty-result">Aucune tâche à planifier sur cette période.</div>
+      }
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       4. TON ADAPTATIF
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'adaptive') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="chat" [size]="20" style="color:#f59e0b" />
+        <div>
+          <h3>💬 Rappel au ton adaptatif</h3>
+          <p>Gemini choisit le ton (formel / chaleureux / urgent) selon le profil du patient et génère le rappel.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Patient <span class="req">*</span></label>
+          <select class="input" (change)="onAdaptivePatient($any($event.target).value)">
+            <option value="" disabled selected>Sélectionner un patient</option>
+            @for (p of allPatients(); track p.id) {
+              <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Date du RDV <span class="req">*</span></label>
+          <input class="input" type="date" [formControl]="$any(adaptiveForm.get('appointment_date'))" />
+        </div>
+        <div class="field">
+          <label>Motif <span class="req">*</span></label>
+          <input class="input" placeholder="Consultation cardiologie" [formControl]="$any(adaptiveForm.get('appointment_reason'))" />
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runAdaptive()" [disabled]="adaptiveLoading() || adaptiveForm.invalid">
+          @if (adaptiveLoading()) { Génération… } @else { <app-icon name="zap" [size]="15" /> Générer }
+        </button>
+      </div>
+      @if (adaptiveError()) { <div class="alert">{{ adaptiveError() }}</div> }
+      @if (adaptiveResult(); as r) {
+        <div class="result-box yellow">
+          <div class="tone-tag" [style.color]="toneColor(r.tone_used)">
+            <app-icon name="chat" [size]="13" />
+            Ton choisi : <strong>{{ r.tone_used }}</strong> — {{ r.tone_reason }}
+          </div>
+          <p class="adaptive-subject">{{ r.subject }}</p>
+          <p class="adaptive-body">{{ r.body }}</p>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       5. PATIENTS PERDUS DE VUE
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'lost') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="bell" [size]="20" style="color:#10b981" />
+        <div>
+          <h3>🔁 Patients perdus de vue</h3>
+          <p>Gemini identifie les patients inactifs et génère des messages de reprise de contact personnalisés.</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Seuil d'inactivité</label>
+          <div class="range-wrap">
+            <input type="range" min="7" max="180" step="7" [value]="inactivityDays()"
+                   (input)="inactivityDays.set(+$any($event.target).value)" />
+            <span class="range-val">{{ inactivityDays() }} jours</span>
+          </div>
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runLost()" [disabled]="lostLoading()">
+          @if (lostLoading()) { Détection… } @else { <app-icon name="zap" [size]="15" /> Détecter }
+        </button>
+      </div>
+      @if (lostError()) { <div class="alert">{{ lostError() }}</div> }
+      @if (lostResult().length === 0 && !lostLoading()) {
+        <div class="empty-result">Aucun patient inactif détecté sur ce seuil.</div>
+      }
+      <div class="lost-list">
+        @for (p of lostResult(); track p.patient_name) {
+          <div class="lost-card">
+            <div class="lc-head">
+              <app-icon name="user" [size]="14" />
+              <strong>{{ p.patient_name }}</strong>
+              <span class="lc-days">{{ p.days_inactive }} jours sans activité</span>
+            </div>
+            @if (p.last_reason) {
+              <p class="lc-reason"><app-icon name="activity" [size]="11" /> Dernier motif : {{ p.last_reason }}</p>
+            }
+            <div class="lc-message">{{ p.message }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       6. RAPPORT HEBDOMADAIRE
+  ════════════════════════════════════════════════════════════════════════ -->
+  @if (activeFeature() === 'weekly') {
+    <div class="feature-panel">
+      <div class="panel-header">
+        <app-icon name="bar-chart" [size]="20" style="color:#6366f1" />
+        <div>
+          <h3>📊 Rapport hebdomadaire IA</h3>
+          <p>Gemini génère un rapport narratif avec tendances, patients à risque et recommandations pour la semaine suivante.</p>
+        </div>
+      </div>
+      <div class="form-row" [formGroup]="weeklyForm">
+        <div class="field">
+          <label>Début de semaine <span class="req">*</span></label>
+          <input class="input" type="date" formControlName="week_start" />
+        </div>
+        <div class="field">
+          <label>Fin de semaine <span class="req">*</span></label>
+          <input class="input" type="date" formControlName="week_end" />
+        </div>
+        <button class="btn btn-primary run-btn" (click)="runWeekly()" [disabled]="weeklyLoading() || weeklyForm.invalid">
+          @if (weeklyLoading()) { Génération… } @else { <app-icon name="zap" [size]="15" /> Générer }
+        </button>
+      </div>
+      @if (weeklyError()) { <div class="alert">{{ weeklyError() }}</div> }
+      @if (weeklyResult(); as r) {
+        <div class="weekly-report">
+          <div class="wr-head">
+            <h4>Rapport du {{ r.week_start }} au {{ r.week_end }}</h4>
+            <button class="btn btn-outline btn-sm" (click)="exportWeeklyPdf()">
+              <app-icon name="file" [size]="14" /> Exporter
+            </button>
+          </div>
+          <div class="wr-sections">
+            <div class="wr-section blue">
+              <h5><app-icon name="activity" [size]="14" /> Activité de la semaine</h5>
+              <p>{{ r.activity_summary }}</p>
+            </div>
+            <div class="wr-section red">
+              <h5><app-icon name="eye" [size]="14" /> Patients à risque</h5>
+              <p>{{ r.at_risk_patients }}</p>
+            </div>
+            <div class="wr-section purple">
+              <h5><app-icon name="bar-chart" [size]="14" /> Tendances</h5>
+              <p>{{ r.trends }}</p>
+            </div>
+            <div class="wr-section green">
+              <h5><app-icon name="shield" [size]="14" /> Recommandations</h5>
+              <p>{{ r.recommendations }}</p>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+</div>

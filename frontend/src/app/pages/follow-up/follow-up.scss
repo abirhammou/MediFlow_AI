@@ -201,3 +201,26 @@
 
 /* ── Forms ── */
 .req { color: var(--danger); }
+
+/* ── Patient select ── */
+.select-patient {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .875rem center;
+  padding-right: 2.5rem;
+  cursor: pointer;
+  option { color: var(--ink); }
+  option[value=""] { color: #a3afc2; }
+}
+
+/* ── Patient link in card ── */
+.patient-link {
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+  strong { color: var(--ink); }
+  .record-num {
+    font-size: .68rem; background: var(--primary-50); color: var(--primary);
+    padding: .1rem .4rem; border-radius: 4px; font-weight: 600;
+  }
+}
+.detail-sub { font-size: .72rem; color: var(--muted); }
