@@ -1,0 +1,119 @@
+<div class="page-head">
+  <div>
+    <h1>Patients</h1>
+    <p>
+      @if (result(); as page) {
+        {{ page.total }} dossier{{ page.total > 1 ? 's' : '' }}{{ hasFilters() ? ' trouvé' + (page.total > 1 ? 's' : '') : '' }}
+      } @else {
+        Dossiers administratifs des patients
+      }
+    </p>
+  </div>
+  @if (perms.canWrite()) {
+    <a class="btn btn-primary" routerLink="/patients/new">
+      <app-icon name="plus" [size]="18" /> Nouveau patient
+    </a>
+  }
+</div>
+
+<section class="card">
+  <form class="toolbar" [formGroup]="filters" (submit)="$event.preventDefault()" role="search">
+    <div class="search">
+      <app-icon name="search" [size]="18" />
+      <input class="input" type="search" formControlName="q" aria-label="Rechercher un patient"
+             placeholder="Nom, prénom, n° de dossier ou CIN" autocomplete="off" />
+    </div>
+    <select class="input" formControlName="gender" aria-label="Filtrer par sexe">
+      <option value="">Tous les sexes</option>
+      @for (gender of genders; track gender) {
+        <option [value]="gender">{{ genderLabels[gender] }}</option>
+      }
+    </select>
+    <select class="input" formControlName="bloodType" aria-label="Filtrer par groupe sanguin">
+      <option value="">Tous les groupes</option>
+      @for (bloodType of bloodTypes; track bloodType) {
+        <option [value]="bloodType">{{ bloodType }}</option>
+      }
+    </select>
+    <input class="input" formControlName="city" list="patient-cities" aria-label="Filtrer par ville"
+           placeholder="Ville" autocomplete="off" />
+    <datalist id="patient-cities">
+      @for (city of cities; track city) { <option [value]="city"></option> }
+    </datalist>
+  </form>
+
+  @if (error()) {
+    <div class="state" role="alert">
+      <strong>Impossible de charger les patients</strong>
+      {{ error() }}
+    </div>
+  } @else if (result(); as page) {
+    @if (page.items.length === 0) {
+      <div class="state">
+        @if (hasFilters()) {
+          <strong>Aucun patient ne correspond à la recherche</strong>
+          <button type="button" class="btn btn-outline btn-sm" (click)="resetFilters()">Effacer les filtres</button>
+        } @else {
+          <strong>Aucun patient enregistré</strong>
+          Les nouveaux dossiers apparaîtront ici.
+        }
+      </div>
+    } @else {
+      <div class="table-wrap" [attr.aria-busy]="loading()">
+        <table>
+          <thead>
+            <tr>
+              <th [attr.aria-sort]="ariaSort(columns['recordNumber'])">
+                <ng-container *ngTemplateOutlet="sortButton; context: { $implicit: columns['recordNumber'] }" />
+              </th>
+              <th [attr.aria-sort]="ariaSort(columns['lastName'])">
+                <ng-container *ngTemplateOutlet="sortButton; context: { $implicit: columns['lastName'] }" />
+              </th>
+              <th>Prénom</th>
+              <th [attr.aria-sort]="ariaSort(columns['age'])">
+                <ng-container *ngTemplateOutlet="sortButton; context: { $implicit: columns['age'] }" />
+              </th>
+              <th>Sexe</th>
+              <th>Téléphone</th>
+              <th>Ville</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (patient of page.items; track patient.id) {
+              <tr class="clickable" tabindex="0" (click)="open(patient)" (keydown.enter)="open(patient)">
+                <td><a class="record" [routerLink]="['/patients', patient.id]" (click)="$event.stopPropagation()">{{ patient.recordNumber }}</a></td>
+                <td><strong>{{ patient.lastName }}</strong></td>
+                <td>{{ patient.firstName }}</td>
+                <td>{{ ageLabel(patient.age) }}</td>
+                <td>{{ genderLabels[patient.gender] }}</td>
+                <td>{{ patient.phone || '—' }}</td>
+                <td>{{ patient.city || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span>Page {{ page.page }} sur {{ pageCount() }} · {{ page.total }} patient{{ page.total > 1 ? 's' : '' }}</span>
+        <div class="actions">
+          <button type="button" class="btn btn-outline btn-xs" [disabled]="page.page <= 1 || loading()"
+                  (click)="goToPage(page.page - 1)">Précédent</button>
+          <button type="button" class="btn btn-outline btn-xs" [disabled]="page.page >= pageCount() || loading()"
+                  (click)="goToPage(page.page + 1)">Suivant</button>
+        </div>
+      </div>
+    }
+  } @else {
+    <div class="state" aria-busy="true">Chargement des patients…</div>
+  }
+</section>
+
+<ng-template #sortButton let-column>
+  <button type="button" class="sort" [class.active]="sortState(column) !== null" (click)="sortBy(column)">
+    {{ column.label }}
+    @switch (sortState(column)) {
+      @case ('first') { <span aria-hidden="true">▲</span> }
+      @case ('reversed') { <span aria-hidden="true">▼</span> }
+    }
+  </button>
+</ng-template>

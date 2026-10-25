@@ -1,0 +1,24 @@
+.identity { display: flex; align-items: center; gap: 1.25rem; padding: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap;
+  h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
+  p { color: var(--muted); font-size: .9rem; }
+  .actions { margin-left: auto; }
+}
+.record-number { font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; font-size: 1.35rem;
+  font-weight: 800; color: var(--primary); padding: .5rem .9rem; border-radius: 12px; background: var(--primary-50); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.info { padding: 1.25rem 1.5rem;
+  h2 { font-size: .95rem; font-weight: 700; margin-bottom: .75rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1rem; margin: 0; font-size: .875rem; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  &.wide { grid-column: 1 / -1; }
+}
+.notes { white-space: pre-wrap; font-size: .875rem; }
+
+/* Reserved for the AI summary (later phase). */
+.ai-summary-slot { min-height: 96px; margin-bottom: 1rem; border: 1px dashed var(--border); border-radius: var(--radius); }
+
+@media (max-width: 560px) {
+  .identity .actions { margin-left: 0; }
+}

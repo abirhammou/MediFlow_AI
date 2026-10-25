@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, Response, status
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query, Response, status
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.db import get_db
@@ -8,6 +12,8 @@ from app.modules.follow_up.schemas import (
     ReminderRequest,
     TaskCreate,
     TaskOut,
+    TaskStats,
+    TaskStatus,
     TaskUpdate,
 )
 from app.modules.follow_up.service import TaskService
@@ -32,12 +38,21 @@ async def create_task(
     return await service.create(task)
 
 
+@router.get("/tasks/stats", response_model=TaskStats)
+async def get_stats(
+    service: TaskService = Depends(get_task_service),
+) -> TaskStats:
+    """Compteurs de tâches par statut."""
+    return await service.stats()
+
+
 @router.get("/tasks", response_model=list[TaskOut])
 async def list_tasks(
+    task_status: Optional[TaskStatus] = Query(default=None, alias="status", description="Filtrer par statut"),
     service: TaskService = Depends(get_task_service),
 ) -> list[TaskOut]:
-    """Consulter toutes les tâches de suivi, triées par échéance."""
-    return await service.list()
+    """Consulter toutes les tâches de suivi, triées par échéance. Filtrable par statut."""
+    return await service.list(task_status)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut)
@@ -49,13 +64,13 @@ async def get_task(
     return await service.get(task_id)
 
 
-@router.put("/tasks/{task_id}", response_model=TaskOut)
+@router.patch("/tasks/{task_id}", response_model=TaskOut)
 async def update_task(
     task_id: str,
     changes: TaskUpdate,
     service: TaskService = Depends(get_task_service),
 ) -> TaskOut:
-    """Modifier la description, l'échéance ou le statut d'une tâche."""
+    """Modifier la description, l'échéance ou le statut d'une tâche (mise à jour partielle)."""
     return await service.update(task_id, changes)
 
 
