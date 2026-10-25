@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../shared/icon/icon';
 import { AuthService, Role } from '../../core/auth/auth.service';
 import { Reminders } from './reminders/reminders';
+import { AiFeatures } from './ai-features/ai-features';
 
 interface PatientOption {
   id: string;
@@ -86,7 +87,7 @@ const DEFAULT_PERMISSIONS: RolePermissions = PERMISSIONS.PATIENT;
 
 @Component({
   selector: 'app-follow-up',
-  imports: [Icon, ReactiveFormsModule, Reminders],
+  imports: [Icon, ReactiveFormsModule, Reminders, AiFeatures],
   templateUrl: './follow-up.html',
   styleUrl: './follow-up.scss',
 })
@@ -161,7 +162,7 @@ export class FollowUp {
   }
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
-  activeTab = signal<'tasks' | 'reminders'>('tasks');
+  activeTab = signal<'tasks' | 'reminders' | 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'weekly'>('tasks');
 
   constructor() { this.loadAll(); }
 

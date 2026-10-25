@@ -32,17 +32,27 @@
 
 /* ── Tabs ── */
 .tabs-bar {
-  display: flex; gap: .375rem; margin-bottom: 1.5rem;
-  border-bottom: 2px solid var(--border); padding-bottom: 0;
+  display: flex; gap: 0; margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border);
+  flex-wrap: wrap; align-items: flex-end;
+  overflow-x: auto;
 }
 .tab-btn {
   display: inline-flex; align-items: center; gap: .5rem;
-  padding: .625rem 1.125rem; font-size: .85rem; font-weight: 600;
+  padding: .625rem 1rem; font-size: .83rem; font-weight: 600;
   border: none; background: none; cursor: pointer; color: var(--muted);
   border-bottom: 2px solid transparent; margin-bottom: -2px;
-  transition: color .15s, border-color .15s;
+  transition: color .15s, border-color .15s; white-space: nowrap;
   &:hover  { color: var(--primary); }
   &.active { color: var(--primary); border-bottom-color: var(--primary); }
+}
+.tab-ai {
+  font-size: .78rem; padding: .5rem .75rem;
+  &.active { color: #7c3aed; border-bottom-color: #7c3aed; background: #faf5ff; border-radius: 6px 6px 0 0; }
+  &:hover:not(.active) { color: #7c3aed; }
+}
+.tabs-separator {
+  width: 1px; background: var(--border); height: 28px; margin: 0 .375rem .125rem; align-self: flex-end;
 }
 
 /* ── Stats ── */

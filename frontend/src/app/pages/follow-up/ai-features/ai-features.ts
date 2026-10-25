@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, input, OnChanges, SimpleChanges } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../../shared/icon/icon';
@@ -23,15 +23,22 @@ type FeatureKey = 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'wee
   templateUrl: './ai-features.html',
   styleUrl:    './ai-features.scss',
 })
-export class AiFeatures {
+export class AiFeatures implements OnChanges {
   private http = inject(HttpClient);
   private fb   = inject(FormBuilder);
+
+  // Input depuis le parent — synchronise l'onglet actif
+  activeFeature = input<string>('summary');
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['activeFeature']) {
+      this.loadPatients();
+    }
+  }
 
   // ── Patients ──────────────────────────────────────────────────────────────
   allPatients     = signal<PatientOption[]>([]);
   patientsLoading = signal(false);
-
-  ngOnInit() { this.loadPatients(); }
 
   loadPatients() {
     this.patientsLoading.set(true);
@@ -41,17 +48,8 @@ export class AiFeatures {
     });
   }
 
-  // ── Active tab ────────────────────────────────────────────────────────────
-  activeFeature = signal<FeatureKey>('summary');
-
-  features: { key: FeatureKey; icon: string; label: string; desc: string; color: string }[] = [
-    { key: 'summary',  icon: 'file-text', label: '🧠 Résumé patient',        desc: 'Historique de suivi en 2-3 phrases',                  color: '#3b82f6' },
-    { key: 'noshow',   icon: 'eye',       label: '🔮 Prédiction no-show',     desc: 'Probabilité de non-présentation',                     color: '#ef4444' },
-    { key: 'schedule', icon: 'calendar',  label: '📅 Planification auto',     desc: 'Calendrier optimisé des rappels',                     color: '#8b5cf6' },
-    { key: 'adaptive', icon: 'chat',      label: '💬 Ton adaptatif',          desc: 'Rappel au ton personnalisé selon le profil',          color: '#f59e0b' },
-    { key: 'lost',     icon: 'bell',      label: '🔁 Patients perdus de vue', desc: 'Reprise de contact après inactivité',                 color: '#10b981' },
-    { key: 'weekly',   icon: 'bar-chart', label: '📊 Rapport hebdomadaire',   desc: 'Résumé narratif + recommandations de la semaine',     color: '#6366f1' },
-  ];
+  // ── Active tab — piloté par le parent ────────────────────────────────────
+  // (activeFeature est maintenant un @input())
 
   // ── 1. Résumé patient ─────────────────────────────────────────────────────
   summaryLoading = signal(false);
@@ -220,12 +218,4 @@ export class AiFeatures {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  isLoading(f: FeatureKey) {
-    const map: Record<FeatureKey, boolean> = {
-      summary: this.summaryLoading(), noshow: this.noshowLoading(),
-      schedule: this.scheduleLoading(), adaptive: this.adaptiveLoading(),
-      lost: this.lostLoading(), weekly: this.weeklyLoading(),
-    };
-    return map[f];
-  }
 }
