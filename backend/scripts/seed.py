@@ -442,6 +442,9 @@ KINDS = (
     "reminders",
     "faq_entries",
     "llm_interactions",
+    "patient_files",
+    "invoices",
+    "payments",
 )
 
 
