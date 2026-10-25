@@ -2,11 +2,13 @@ import { Component, computed, inject } from '@angular/core';
 import { AuthService } from '../../core/auth/auth.service';
 import { ReportAdmin } from './report-admin';
 import { ReportDoctor } from './report-doctor';
+import { ReportPatient } from './report-patient';
+import { ReportSecretary } from './report-secretary';
 
 /** Aiguillage : chaque rôle voit sa propre version du module ReportWriter. */
 @Component({
   selector: 'app-report-writer',
-  imports: [ReportAdmin, ReportDoctor],
+  imports: [ReportAdmin, ReportDoctor, ReportSecretary, ReportPatient],
   template: `
     @if (!role()) {
       <p class="loading">Chargement…</p>
@@ -14,11 +16,12 @@ import { ReportDoctor } from './report-doctor';
       @switch (role()) {
         @case ('DOCTOR') { <app-report-doctor /> }
         @case ('ADMIN') { <app-report-admin /> }
-        @case ('SECRETARY') { <app-report-admin [canArchive]="false" /> }
+        @case ('SECRETARY') { <app-report-secretary /> }
+        @case ('PATIENT') { <app-report-patient /> }
         @default {
           <div class="no-access">
             <h2>ReportWriter AI</h2>
-            <p>Cet espace est réservé à l'équipe médicale. Votre espace patient arrive bientôt.</p>
+            <p>Cet espace n'est pas disponible pour votre rôle.</p>
           </div>
         }
       }

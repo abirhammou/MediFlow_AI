@@ -1,3 +1,5 @@
+import asyncio
+
 from beanie import PydanticObjectId
 from bson.errors import InvalidId
 
@@ -7,6 +9,7 @@ from app.llm.service import generate_json
 from app.modules.auth.models import Role, User
 from app.modules.reports.guardrails import check_content
 from app.modules.reports.models import MedicalReport, ReportStatus
+from app.modules.reports.pdf import build_pdf
 from app.modules.reports.prompts import MISSING_SECTION, SYSTEM_PROMPT, report_prompt
 from app.modules.reports.repository import ReportRepository
 from app.modules.reports.schemas import (
@@ -20,6 +23,9 @@ from app.modules.reports.schemas import (
 )
 
 MIN_NOTES_FOR_GENERATION = 20
+
+# Ces rôles ne voient jamais les notes brutes (données du médecin) ni les avertissements du garde-fou.
+READ_ONLY_FINAL_ROLES = (Role.SECRETARY, Role.PATIENT)
 
 SECTIONS = (
     ("reason", "Motif de consultation"),
@@ -43,10 +49,11 @@ def _not_found() -> APIError:
     return APIError(404, "report_not_found", "Compte rendu introuvable.")
 
 
-def _to_out(report: MedicalReport) -> ReportOut:
+def _to_out(report: MedicalReport, *, redact: bool = False) -> ReportOut:
+    """`redact=True` : version pour la secrétaire et le patient, sans notes brutes ni avertissements."""
     warnings = (
         check_content(report.raw_notes, report.structured_content)
-        if report.structured_content
+        if report.structured_content and not redact
         else []
     )
     return ReportOut(
@@ -55,7 +62,7 @@ def _to_out(report: MedicalReport) -> ReportOut:
         doctor_id=str(report.doctor_id),
         appointment_id=str(report.appointment_id) if report.appointment_id else None,
         title=report.title,
-        raw_notes=report.raw_notes,
+        raw_notes="" if redact else report.raw_notes,
         structured_content=report.structured_content,
         status=report.status,
         archived_at=report.archived_at,
@@ -87,6 +94,7 @@ class ReportService:
     # ── Droits ────────────────────────────────────────────────────────────────
     # Médecin : ses comptes rendus. Admin : lecture de tous + archivage.
     # Secrétaire : lecture des comptes rendus finalisés uniquement.
+    # Patient : lecture de ses propres comptes rendus finalisés uniquement.
 
     @staticmethod
     def _can_read(user: User, report: MedicalReport) -> bool:
@@ -96,6 +104,12 @@ class ReportService:
             return report.doctor_id == user.id
         if user.role == Role.SECRETARY:
             return report.status == ReportStatus.FINAL
+        if user.role == Role.PATIENT:
+            return (
+                report.status == ReportStatus.FINAL
+                and user.patient_id is not None
+                and report.patient_id == user.patient_id
+            )
         return False
 
     async def _load(
@@ -151,10 +165,16 @@ class ReportService:
         size: int,
     ) -> ReportPage:
         statuses = [status] if status else [ReportStatus.DRAFT, ReportStatus.FINAL]  # archivés masqués
-        if user.role == Role.SECRETARY:
+        if user.role in READ_ONLY_FINAL_ROLES:
             statuses = [s for s in statuses if s == ReportStatus.FINAL]
+
         patient_oid = None
-        if patient_id:
+        if user.role == Role.PATIENT:
+            # Le patient ne choisit jamais le dossier : c'est celui de son compte.
+            patient_oid = user.patient_id
+            if patient_oid is None:
+                statuses = []  # compte sans dossier patient : rien à montrer
+        elif patient_id:
             try:
                 patient_oid = PydanticObjectId(patient_id)
             except (InvalidId, TypeError):
@@ -173,7 +193,8 @@ class ReportService:
         return ReportPage(items=[_to_item(r) for r in items], total=total, page=page, size=size)
 
     async def get(self, user: User, report_id: str) -> ReportOut:
-        return _to_out(await self._load(user, report_id))
+        report = await self._load(user, report_id)
+        return _to_out(report, redact=user.role in READ_ONLY_FINAL_ROLES)
 
     async def update(self, user: User, report_id: str, data: ReportUpdate) -> ReportOut:
         report = await self._load(user, report_id, author_only=True)
@@ -193,6 +214,17 @@ class ReportService:
         report.status = ReportStatus.ARCHIVED
         report.archived_at = utcnow()
         return _to_out(await self.repository.save(report))
+
+    # ── Export ────────────────────────────────────────────────────────────────
+
+    async def export_pdf(self, user: User, report_id: str) -> tuple[bytes, str]:
+        report = await self._load(user, report_id)  # mêmes droits que la lecture
+        if not report.structured_content:
+            raise APIError(
+                409, "nothing_to_export", "Aucun contenu à exporter : générez d'abord le compte rendu."
+            )
+        pdf = await asyncio.to_thread(build_pdf, report)  # ne bloque pas la boucle async
+        return pdf, f"compte-rendu-{report.id}.pdf"
 
     # ── LLM ───────────────────────────────────────────────────────────────────
 
