@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30, gt=0)
     # Shared LiteLLM client (app/llm/client.py): provider-prefixed model IDs.
     llm_model: str = "gemini/gemini-3.8-flash"
-    llm_fallback_models: str = "groq/llama-3.3-70b-versatile"
+    llm_fallback_models: str = "groq/openai/gpt-oss-120b"
     gemini_api_key: SecretStr | None = None
     groq_api_key: SecretStr | None = None
     llm_max_retries: int = Field(default=1, ge=0, le=5)
