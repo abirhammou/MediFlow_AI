@@ -1,16 +1,24 @@
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Observable, of, switchMap, throwError } from 'rxjs';
 import { apiErrorMessage } from '../../core/auth/auth.service';
 import { Icon } from '../../shared/icon/icon';
-import { ReportListItem, ReportOut, ReportsApi, ReportUpdate } from './reports.api';
+import {
+  PatientOption,
+  ReportListItem,
+  ReportOut,
+  ReportsApi,
+  ReportStatus,
+  ReportUpdate,
+} from './reports.api';
 
 const MISSING = 'Non précisé dans les notes.'; // même texte que MISSING_SECTION côté backend
 const SECTION_ICONS = ['🎯', '📚', '🩺', '🧾', '🗓️'];
 
 @Component({
   selector: 'app-report-doctor',
-  imports: [Icon, FormsModule],
+  imports: [Icon, FormsModule, DatePipe],
   template: `
     <div class="module-page">
       <div class="module-header">
@@ -35,23 +43,25 @@ const SECTION_ICONS = ['🎯', '📚', '🩺', '🧾', '🗓️'];
           </div>
 
           <label class="field">
-            <span>Mes comptes rendus</span>
-            <select [ngModel]="current()?.id ?? ''" (ngModelChange)="openById($event)">
-              <option value="">— Nouveau compte rendu —</option>
-              @for (r of list(); track r.id) {
-                <option [value]="r.id">{{ r.title }} · {{ statusLabel(r.status) }}</option>
-              }
-            </select>
-          </label>
-
-          <label class="field">
             <span>Titre</span>
             <input type="text" [(ngModel)]="title" [disabled]="locked()" placeholder="Ex. Consultation du jour" maxlength="200" />
           </label>
 
           <label class="field">
-            <span>ID patient</span>
-            <input type="text" [(ngModel)]="patientId" [disabled]="!!current()" placeholder="24 caractères (ObjectId)" />
+            <span>Patient</span>
+            @if (patients().length) {
+              <select [(ngModel)]="patientId" [disabled]="!!current()">
+                <option value="">— Choisir un patient —</option>
+                @if (patientId && !patientName(patientId)) {
+                  <option [value]="patientId">{{ shortId(patientId) }}</option>
+                }
+                @for (p of patients(); track p.id) {
+                  <option [value]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            } @else {
+              <input type="text" [(ngModel)]="patientId" [disabled]="!!current()" placeholder="24 caractères (ObjectId)" />
+            }
           </label>
 
           <label class="field grow">
@@ -111,6 +121,17 @@ const SECTION_ICONS = ['🎯', '📚', '🩺', '🧾', '🗓️'];
                 <button type="button" class="btn" (click)="startEdit()">✏️ Modifier</button>
               }
               <button type="button" class="btn" (click)="copy()">{{ copied() ? 'Copié ✓' : 'Copier le texte' }}</button>
+              @if (current(); as c) {
+                <button type="button" class="btn pdf" [disabled]="busy() !== null || exporting()" (click)="exportPdf(c)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                  {{ exporting() ? 'Export…' : 'PDF' }}
+                </button>
+              }
               @if (!locked()) {
                 <button type="button" class="btn primary" [disabled]="busy() !== null" (click)="finalize()">
                   {{ busy() === 'finalize' ? 'Validation…' : '🖊️ Valider et signer' }}
@@ -172,6 +193,56 @@ const SECTION_ICONS = ['🎯', '📚', '🩺', '🧾', '🗓️'];
           </div>
         </aside>
       </div>
+
+      <!-- 4. Mes comptes rendus -->
+      <section class="card list-card">
+        <div class="card-head">
+          <h2>Mes comptes rendus <span class="muted">({{ total() }})</span></h2>
+          <form class="filters" (ngSubmit)="applyFilters()">
+            <input type="search" name="q" [(ngModel)]="q" placeholder="Rechercher par titre…" />
+            <select name="status" [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()">
+              <option value="">Actifs</option>
+              <option value="DRAFT">Brouillons</option>
+              <option value="FINAL">Finalisés</option>
+              <option value="ARCHIVED">Archivés</option>
+            </select>
+            <button type="submit" class="btn">Rechercher</button>
+          </form>
+        </div>
+
+        @if (!list().length) {
+          <p class="muted pad">Aucun compte rendu trouvé.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Titre</th><th>Patient</th><th>Statut</th><th>Mis à jour</th><th class="right">Actions</th></tr>
+              </thead>
+              <tbody>
+                @for (r of list(); track r.id) {
+                  <tr [class.active]="current()?.id === r.id">
+                    <td class="strong">{{ r.title }}</td>
+                    <td [class.mono]="!patientName(r.patient_id)">{{ patientLabel(r.patient_id) }}</td>
+                    <td><span class="pill" [attr.data-status]="r.status">{{ statusLabel(r.status) }}</span></td>
+                    <td>{{ r.updated_at | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="right">
+                      <button type="button" class="btn small" (click)="openReport(r)">Ouvrir</button>
+                      @if (r.status !== 'ARCHIVED') {
+                        <button type="button" class="btn small danger" (click)="archiveItem(r)">Archiver</button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <button type="button" class="btn" [disabled]="page() <= 1" (click)="goTo(page() - 1)">Précédent</button>
+            <span>Page {{ page() }} / {{ totalPages() }} · {{ total() }} résultat(s)</span>
+            <button type="button" class="btn" [disabled]="page() >= totalPages()" (click)="goTo(page() + 1)">Suivant</button>
+          </div>
+        }
+      </section>
     </div>
   `,
   styleUrl: './report-doctor.scss',
@@ -189,11 +260,26 @@ export class ReportDoctor {
   notes = '';
   draftContent = '';
 
+  // Liste « Mes comptes rendus »
+  q = '';
+  statusFilter: ReportStatus | '' = '';
+  readonly total = signal(0);
+  readonly page = signal(1);
+  readonly size = 8;
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.size)));
+
+  // Patients (liste déroulante ; vide si le module patients n'est pas accessible)
+  readonly patients = signal<PatientOption[]>([]);
+  private readonly patientNames = computed(
+    () => new Map(this.patients().map((p) => [p.id, p.name] as const)),
+  );
+
   readonly list = signal<ReportListItem[]>([]);
   readonly current = signal<ReportOut | null>(null);
   readonly busy = signal<'save' | 'generate' | 'finalize' | 'edit' | null>(null);
   readonly editing = signal(false);
   readonly copied = signal(false);
+  readonly exporting = signal(false);
   readonly error = signal<string | null>(null);
   readonly info = signal<string | null>(null);
 
@@ -219,6 +305,7 @@ export class ReportDoctor {
 
   constructor() {
     this.refresh();
+    this.api.patients().subscribe((p) => this.patients.set(p));
   }
 
   icon(i: number): string {
@@ -227,6 +314,18 @@ export class ReportDoctor {
 
   statusLabel(status: string): string {
     return { DRAFT: 'Brouillon', FINAL: 'Finalisé', ARCHIVED: 'Archivé' }[status] ?? status;
+  }
+
+  shortId(id: string): string {
+    return '…' + id.slice(-6);
+  }
+
+  patientName(id: string): string | null {
+    return this.patientNames().get(id) ?? null;
+  }
+
+  patientLabel(id: string): string {
+    return this.patientName(id) ?? this.shortId(id);
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -243,6 +342,11 @@ export class ReportDoctor {
     this.api.get(id).subscribe({ next: (r) => this.load(r), error: (e) => this.fail(e) });
   }
 
+  openReport(item: ReportListItem): void {
+    this.openById(item.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   private load(r: ReportOut): void {
     this.current.set(r);
     this.title = r.title;
@@ -251,8 +355,46 @@ export class ReportDoctor {
     this.editing.set(false);
   }
 
+  // ── Liste ──────────────────────────────────────────────────────────────────
   private refresh(): void {
-    this.api.list({ page: 1, size: 50 }).subscribe({ next: (p) => this.list.set(p.items), error: (e) => this.fail(e) });
+    this.api
+      .list({ status: this.statusFilter, q: this.q, page: this.page(), size: this.size })
+      .subscribe({
+        next: (p) => {
+          // Dernière page vidée (archivage) : on recule d'une page.
+          if (!p.items.length && this.page() > 1) {
+            this.page.set(this.page() - 1);
+            this.refresh();
+            return;
+          }
+          this.list.set(p.items);
+          this.total.set(p.total);
+        },
+        error: (e) => this.fail(e),
+      });
+  }
+
+  applyFilters(): void {
+    this.page.set(1);
+    this.refresh();
+  }
+
+  goTo(page: number): void {
+    this.page.set(page);
+    this.refresh();
+  }
+
+  archiveItem(item: ReportListItem): void {
+    if (!confirm(`Archiver « ${item.title} » ? Il ne sera plus modifiable.`)) return;
+    this.clearMessages();
+    this.api.archive(item.id).subscribe({
+      next: () => {
+        if (this.current()?.id === item.id) this.newReport();
+        this.info.set('Compte rendu archivé.');
+        this.refresh();
+      },
+      error: (e) => this.fail(e),
+    });
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -267,7 +409,14 @@ export class ReportDoctor {
     if (!cur) {
       const patient = this.patientId.trim();
       if (!/^[0-9a-f]{24}$/i.test(patient)) {
-        return throwError(() => new Error("L'ID patient doit contenir 24 caractères hexadécimaux."));
+        return throwError(
+          () =>
+            new Error(
+              this.patients().length
+                ? 'Choisissez un patient.'
+                : "L'ID patient doit contenir 24 caractères hexadécimaux.",
+            ),
+        );
       }
       return this.api.create({ patient_id: patient, title, raw_notes: notes });
     }
@@ -335,6 +484,19 @@ export class ReportDoctor {
     navigator.clipboard.writeText(text).then(() => {
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 1500);
+    });
+  }
+
+  /** Exporte la dernière version enregistrée du compte rendu. */
+  exportPdf(report: ReportOut): void {
+    this.clearMessages();
+    this.exporting.set(true);
+    this.api.downloadPdf(report.id, report.title).subscribe({
+      next: () => this.exporting.set(false),
+      error: () => {
+        this.exporting.set(false);
+        this.error.set("Impossible d'exporter le PDF.");
+      },
     });
   }
 
