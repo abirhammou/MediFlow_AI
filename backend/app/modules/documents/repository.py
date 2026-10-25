@@ -28,6 +28,9 @@ class DocumentRepository:
     async def save(self, document: MedicalDocument) -> MedicalDocument:
         return await document.save()
 
+    async def delete(self, document: MedicalDocument) -> None:
+        await document.delete()
+
     async def list_categories(self) -> list[DocumentCategory]:
         return await DocumentCategory.find().sort([("code", 1)]).to_list()
 

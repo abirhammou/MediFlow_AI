@@ -40,3 +40,4 @@ class MedicalDocument(TimestampedDocument):
 
     class Settings:
         name = "medical_documents"
+        keep_nulls = False

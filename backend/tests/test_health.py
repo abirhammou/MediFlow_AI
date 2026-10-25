@@ -57,9 +57,11 @@ def test_openapi_contains_only_discovered_module_routes():
     assert "/api/notes/" in paths
     assert "/api/llm/status" in paths
     assert set(paths) == {
-        "/api/health",
+        "/health",
         "/api/documents",
         "/api/documents/",
+        "/api/documents/patient-options",
+        "/api/documents/patients/{patient_id}/history",
         "/api/documents/{document_id}",
         "/api/documents/{document_id}/extract",
         "/api/documents/{document_id}/review",
@@ -80,12 +82,18 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/users/{user_id}/link-patient",
         "/api/users/{user_id}/unlink-patient",
         "/api/dashboard/summary",
+        "/api/reports",
+        "/api/reports/{report_id}",
+        "/api/reports/{report_id}/archive",
+        "/api/reports/{report_id}/finalize",
+        "/api/reports/{report_id}/generate",
         "/api/patients",
         "/api/patients/duplicates",
         "/api/patients/deleted",
         "/api/patients/{patient_id}",
         "/api/patients/{patient_id}/restore",
         "/api/follow-up/tasks",
+        "/api/follow-up/tasks/stats",
         "/api/follow-up/tasks/{task_id}",
         "/api/follow-up/reminders/generate",
     }

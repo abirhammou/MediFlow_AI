@@ -3,12 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 from beanie import PydanticObjectId
+from pydantic import ValidationError
 
 from app.core.models import AiReviewStatus
 from app.core.time import utcnow
 from app.errors import APIError
 from app.modules.auth.models import Role, User
 from app.modules.documents.models import ExtractedField, MedicalDocument
+from app.modules.documents.prompts import DOCUMENT_CATEGORIES, SYSTEM_PROMPT, document_prompt
 from app.modules.documents.schemas import (
     DocumentExtraction,
     DocumentReview,
@@ -16,6 +18,7 @@ from app.modules.documents.schemas import (
     ReviewedField,
 )
 from app.modules.documents.service import DocumentService, document_status
+from app.modules.patients.models import Gender, Patient
 
 
 def test_document_status_is_derived_from_all_fields():
@@ -107,7 +110,7 @@ async def test_document_routes_require_authentication(api_client):
     assert (await api_client.post("/api/documents", json={})).status_code == 401
 
 
-@pytest.mark.parametrize("role", [Role.DOCTOR, Role.SECRETARY, Role.ADMIN])
+@pytest.mark.parametrize("role", [Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN])
 async def test_staff_roles_can_create_documents(api_client, user_factory, auth, role):
     user = await user_factory(email=f"meddoc-create-{role.value.lower()}@example.test", role=role)
     response = await api_client.post(
@@ -127,9 +130,60 @@ async def test_staff_roles_can_create_documents(api_client, user_factory, auth, 
     assert (await api_client.get(f"/api/documents/{response.json()['id']}", headers=auth(user))).status_code == 200
 
 
-async def test_admin_staff_is_not_authorized_for_med_documents(api_client, admin_staff, auth):
-    response = await api_client.get("/api/documents/", headers=auth(admin_staff))
-    assert response.status_code == 403
+async def test_admin_staff_can_read_update_but_not_archive_or_review(
+    api_client, doctor, admin_staff, auth, create_document
+):
+    document = await create_document(doctor)
+    listed = await api_client.get("/api/documents/", headers=auth(admin_staff))
+    updated = await api_client.patch(
+        f"/api/documents/{document['id']}",
+        headers=auth(admin_staff),
+        json={"title": "Titre administratif"},
+    )
+    archived = await api_client.delete(
+        f"/api/documents/{document['id']}", headers=auth(admin_staff)
+    )
+    reviewed = await api_client.post(
+        f"/api/documents/{document['id']}/review",
+        headers=auth(admin_staff),
+        json={
+            "status": "VALIDATED",
+            "fields": [{"name": "result", "value": "13 g/dL"}],
+        },
+    )
+
+    assert listed.status_code == 200
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Titre administratif"
+    assert archived.status_code == 403
+    assert reviewed.status_code == 403
+
+
+async def test_admin_staff_can_search_patient_options_but_patients_cannot(
+    api_client, admin_staff, patient, auth
+):
+    await Patient(
+        record_number="PAT-2025-12345",
+        first_name="Amal",
+        last_name="Patient",
+        date_of_birth=utcnow(),
+        gender=Gender.FEMALE,
+    ).insert()
+    staff_response = await api_client.get(
+        "/api/documents/patient-options?q=Patient", headers=auth(admin_staff)
+    )
+    patient_response = await api_client.get(
+        "/api/documents/patient-options?q=Patient", headers=auth(patient)
+    )
+    options = staff_response.json()
+
+    assert staff_response.status_code == 200
+    assert len(options) == 1
+    assert options[0]["id"]
+    assert options[0]["recordNumber"] == "PAT-2025-12345"
+    assert options[0]["firstName"] == "Amal"
+    assert options[0]["lastName"] == "Patient"
+    assert patient_response.status_code == 403
 
 
 async def test_patient_cannot_create_or_modify_documents(api_client, patient, auth):
@@ -272,7 +326,7 @@ async def test_updating_source_text_clears_extracted_data_and_category(
     assert response.json()["status"] == "DRAFT"
 
 
-async def test_doctor_and_admin_archive_documents_logically(
+async def test_doctor_archives_and_admin_permanently_deletes_documents(
     api_client, doctor, admin, secretary, auth, create_document, db
 ):
     doctor_doc = await create_document(doctor)
@@ -287,15 +341,15 @@ async def test_doctor_and_admin_archive_documents_logically(
     stored_doctor_doc = await db.medical_documents.find_one({"_id": PydanticObjectId(doctor_doc["id"])})
 
     admin_doc = await create_document(doctor)
-    archived_by_admin = await api_client.delete(
+    deleted_by_admin = await api_client.delete(
         f"/api/documents/{admin_doc['id']}", headers=auth(admin)
     )
     stored_admin_doc = await db.medical_documents.find_one({"_id": PydanticObjectId(admin_doc["id"])})
 
     assert archived_by_doctor.status_code == 204
-    assert archived_by_admin.status_code == 204
+    assert deleted_by_admin.status_code == 204
     assert stored_doctor_doc is not None and stored_doctor_doc["archivedAt"] is not None
-    assert stored_admin_doc is not None and stored_admin_doc["archivedAt"] is not None
+    assert stored_admin_doc is None
     active_list = await api_client.get(
         f"/api/documents/?patient_id={doctor_doc['patient_id']}", headers=auth(doctor)
     )
@@ -305,6 +359,10 @@ async def test_doctor_and_admin_archive_documents_logically(
     assert doctor_doc["id"] not in [item["id"] for item in active_list.json()["items"]]
     assert patient_history.json()["items"][0]["id"] == doctor_doc["id"]
     assert patient_history.json()["items"][0]["status"] == "ARCHIVED"
+    admin_document_after_delete = await api_client.get(
+        f"/api/documents/{admin_doc['id']}", headers=auth(admin)
+    )
+    assert admin_document_after_delete.status_code == 404
 
 
 async def test_secretary_cannot_update_document(
@@ -349,6 +407,7 @@ class FakeDocumentRepository:
         self.document = document
         self.categories = categories
         self.save_count = 0
+        self.delete_count = 0
 
     async def get(self, document_id: PydanticObjectId):
         return self.document if document_id == self.document.id else None
@@ -360,11 +419,16 @@ class FakeDocumentRepository:
         self.save_count += 1
         return document
 
+    async def delete(self, document):
+        self.delete_count += 1
+
 
 def _service_user(role: Role = Role.DOCTOR) -> SimpleNamespace:
     return SimpleNamespace(
         id=PydanticObjectId(),
         role=role,
+        first_name="Amal",
+        last_name="Melki",
     )
 
 
@@ -385,9 +449,31 @@ def _service_document() -> SimpleNamespace:
     )
 
 
+async def test_admin_deletes_document_while_doctor_archives():
+    admin_document = _service_document()
+    admin_repository = FakeDocumentRepository(admin_document, [])
+    admin_service = DocumentService(admin_repository)
+
+    await admin_service.delete(_service_user(Role.ADMIN), str(admin_document.id))
+
+    assert admin_repository.delete_count == 1
+    assert admin_repository.save_count == 0
+    assert admin_document.archived_at is None
+
+    doctor_document = _service_document()
+    doctor_repository = FakeDocumentRepository(doctor_document, [])
+    doctor_service = DocumentService(doctor_repository)
+
+    await doctor_service.delete(_service_user(Role.DOCTOR), str(doctor_document.id))
+
+    assert doctor_repository.delete_count == 0
+    assert doctor_repository.save_count == 1
+    assert doctor_document.archived_at is not None
+
+
 async def test_extraction_uses_only_document_text_and_categories_without_saving(monkeypatch):
     document = _service_document()
-    category = SimpleNamespace(code="LAB_RESULT", label="Résultat de laboratoire", description=None)
+    category = SimpleNamespace(code="MEDICAL", label="Document médical général", description=None)
     repository = FakeDocumentRepository(document, [category])
     service = DocumentService(repository)
     calls: list[dict] = []
@@ -402,7 +488,7 @@ async def test_extraction_uses_only_document_text_and_categories_without_saving(
                 ExtractedFieldProposal(name="dose", value="500 mg"),
                 ExtractedFieldProposal(name="autre", value=None),
             ],
-            suggested_category_code="LAB_RESULT",
+            suggested_category_code="MEDICAL",
         )
 
     monkeypatch.setattr("app.modules.documents.service.generate_json", fake_generate_json)
@@ -413,38 +499,39 @@ async def test_extraction_uses_only_document_text_and_categories_without_saving(
     assert calls[0]["module"] == "documents"
     assert calls[0]["output_schema"] is DocumentExtraction
     assert "Hémoglobine : 13 g/dL." in calls[0]["user"]
-    assert "LAB_RESULT" in calls[0]["user"]
+    assert "MEDICAL" in calls[0]["user"]
     assert document.title not in calls[0]["user"]
     assert str(document.patient_id) not in calls[0]["user"]
     assert [field.value for field in result.fields] == ["13 g/dL", None, None]
-    assert result.suggested_category_code == "LAB_RESULT"
+    assert result.suggested_category_code == "MEDICAL"
     assert len(result.warnings) == 1
     assert repository.save_count == 0
 
 
-async def test_extraction_discards_unknown_category(monkeypatch):
-    document = _service_document()
-    repository = FakeDocumentRepository(document, [])
-    service = DocumentService(repository)
+def test_extraction_prompt_uses_only_the_strict_category_allowlist():
+    prompt = document_prompt("Une facture.")
 
-    async def fake_generate_json(*, module, system, user, output_schema):
-        return DocumentExtraction(
-            fields=[],
-            suggested_category_code="UNKNOWN",
-        )
+    assert (
+        "Tu dois obligatoirement choisir la catégorie parmi cette liste exacte : "
+        "MEDICAL, ORDONNANCE, CERTIFICAT, FINANCIER, CNAM, ADMINISTRATIF."
+    ) in SYSTEM_PROMPT
+    assert "Si le document est une facture, choisis FINANCIER." in SYSTEM_PROMPT
+    assert "Si c'est un arrêt de travail, choisis CERTIFICAT." in SYSTEM_PROMPT
+    assert "Ne réponds JAMAIS avec une autre catégorie que celles-ci." in SYSTEM_PROMPT
+    for code, _ in DOCUMENT_CATEGORIES:
+        assert f"- {code}:" in prompt
+    assert "LAB_RESULT" not in prompt
 
-    monkeypatch.setattr("app.modules.documents.service.generate_json", fake_generate_json)
 
-    result = await service.extract(_service_user(), str(document.id))
-
-    assert result.suggested_category_code is None
-    assert result.warnings == ["La catégorie proposée n'existe pas; elle a été ignorée."]
-    assert repository.save_count == 0
+@pytest.mark.parametrize("category", ["LAB_RESULT", "UNKNOWN", "medical"])
+def test_extraction_schema_rejects_categories_outside_the_allowlist(category):
+    with pytest.raises(ValidationError):
+        DocumentExtraction(fields=[], suggested_category_code=category)
 
 
 async def test_review_validates_all_fields_with_actor_and_timestamp():
     document = _service_document()
-    category = SimpleNamespace(code="LAB_RESULT", label="Résultat de laboratoire", description=None)
+    category = SimpleNamespace(code="MEDICAL", label="Document médical général", description=None)
     repository = FakeDocumentRepository(document, [category])
     service = DocumentService(repository)
     doctor = _service_user()
@@ -458,15 +545,16 @@ async def test_review_validates_all_fields_with_actor_and_timestamp():
                 ReviewedField(name="hémoglobine", value="13 g/dL"),
                 ReviewedField(name="résultat", value="validé"),
             ],
-            category_code="LAB_RESULT",
-            ai_suggested_category_code="LAB_RESULT",
+            category_code="MEDICAL",
+            ai_suggested_category_code="MEDICAL",
         ),
     )
 
     assert repository.save_count == 1
     assert result.status == AiReviewStatus.VALIDATED
-    assert result.category_code == "LAB_RESULT"
-    assert result.ai_suggested_category_code == "LAB_RESULT"
+    assert result.category_code == "MEDICAL"
+    assert result.ai_suggested_category_code == "MEDICAL"
+    assert result.validated_by_name == "Dr Amal Melki"
     assert all(field.status == AiReviewStatus.VALIDATED for field in document.extracted_fields)
     assert all(field.validated_by == doctor.id for field in document.extracted_fields)
     assert all(field.validated_at is not None for field in document.extracted_fields)
@@ -474,7 +562,7 @@ async def test_review_validates_all_fields_with_actor_and_timestamp():
 
 async def test_review_rejects_all_fields_and_clears_selected_category():
     document = _service_document()
-    category = SimpleNamespace(code="LAB_RESULT", label="Résultat de laboratoire", description=None)
+    category = SimpleNamespace(code="MEDICAL", label="Document médical général", description=None)
     repository = FakeDocumentRepository(document, [category])
     service = DocumentService(repository)
 
@@ -484,14 +572,14 @@ async def test_review_rejects_all_fields_and_clears_selected_category():
         DocumentReview(
             status=AiReviewStatus.REJECTED,
             fields=[ReviewedField(name="hémoglobine", value="13 g/dL")],
-            category_code="LAB_RESULT",
-            ai_suggested_category_code="LAB_RESULT",
+            category_code="MEDICAL",
+            ai_suggested_category_code="MEDICAL",
         ),
     )
 
     assert result.status == AiReviewStatus.REJECTED
     assert result.category_code is None
-    assert result.ai_suggested_category_code == "LAB_RESULT"
+    assert result.ai_suggested_category_code == "MEDICAL"
     assert document.extracted_fields[0].status == AiReviewStatus.REJECTED
     assert document.extracted_fields[0].validated_by is not None
     assert document.extracted_fields[0].validated_at is not None

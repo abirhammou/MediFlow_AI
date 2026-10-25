@@ -29,6 +29,7 @@ export interface MedicalDocument extends DocumentListItem {
   raw_text: string;
   file_path: string | null;
   uploaded_by: string | null;
+  validated_by_name: string | null;
 }
 
 export interface DocumentPage {
@@ -36,6 +37,13 @@ export interface DocumentPage {
   total: number;
   page: number;
   size: number;
+}
+
+export interface PatientOption {
+  id: string;
+  recordNumber: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface DocumentCreate {
@@ -81,6 +89,13 @@ export class MedDocApi {
   history(patientId: string, page = 1, size = 100): Observable<DocumentPage> {
     const params = new HttpParams().set('page', page).set('size', size);
     return this.http.get<DocumentPage>(`${this.base}/patients/${patientId}/history`, { params });
+  }
+
+  patientOptions(query = '', patientId = ''): Observable<PatientOption[]> {
+    let params = new HttpParams();
+    if (query.trim()) params = params.set('q', query.trim());
+    if (patientId.trim()) params = params.set('patient_id', patientId.trim());
+    return this.http.get<PatientOption[]>(`${this.base}/patient-options`, { params });
   }
 
   get(id: string): Observable<MedicalDocument> {

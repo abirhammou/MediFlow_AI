@@ -23,13 +23,18 @@ class LLMTimeoutError(APIError):
 
 
 class LLMRateLimitError(APIError):
-    def __init__(self) -> None:
-        super().__init__(429, "llm_rate_limited", "Le quota du fournisseur LLM est dépassé.")
+    def __init__(
+        self, detail: str = "Le quota du fournisseur LLM est dépassé."
+    ) -> None:
+        super().__init__(429, "llm_rate_limited", detail)
 
 
 class LLMResponseError(APIError):
-    def __init__(self) -> None:
-        super().__init__(502, "llm_invalid_response", "Le fournisseur LLM a renvoyé une réponse invalide.")
+    def __init__(
+        self,
+        detail: str = "Le fournisseur LLM a renvoyé une réponse invalide.",
+    ) -> None:
+        super().__init__(502, "llm_invalid_response", detail)
 
 
 def register_error_handlers(app: FastAPI) -> None:

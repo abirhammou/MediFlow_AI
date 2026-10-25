@@ -52,7 +52,7 @@ export const routes: Routes = [
       {
         path: 'med-doc',
         title: 'MedDoc AI · MediFlow AI',
-        canActivate: [roleGuard(['DOCTOR', 'SECRETARY', 'ADMIN', 'PATIENT'])],
+        canActivate: [roleGuard(['DOCTOR', 'SECRETARY', 'ADMIN_STAFF', 'ADMIN', 'PATIENT'])],
         loadComponent: () => import('./pages/med-doc/med-doc').then(m => m.MedDoc),
       },
       {

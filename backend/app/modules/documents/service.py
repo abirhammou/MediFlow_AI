@@ -26,8 +26,11 @@ from app.modules.documents.schemas import (
 STAFF_ROLES = {
     Role.DOCTOR,
     Role.SECRETARY,
+    Role.ADMIN_STAFF,
     Role.ADMIN,
 }
+EDITOR_ROLES = {Role.DOCTOR, Role.ADMIN_STAFF, Role.ADMIN}
+REVIEWER_ROLES = {Role.DOCTOR, Role.ADMIN}
 
 
 def document_status(fields: list[ExtractedField]) -> AiReviewStatus:
@@ -72,12 +75,30 @@ def _to_list_item(document: MedicalDocument) -> DocumentListItem:
     )
 
 
-def _to_out(document: MedicalDocument) -> DocumentOut:
+async def _to_out(
+    document: MedicalDocument, validator: User | None = None
+) -> DocumentOut:
+    validated_by = next(
+        (
+            field.validated_by
+            for field in document.extracted_fields
+            if field.status == AiReviewStatus.VALIDATED and field.validated_by
+        ),
+        None,
+    )
+    if validator is None and validated_by:
+        validator = await User.get(validated_by)
+    validated_by_name = (
+        f"Dr {validator.first_name} {validator.last_name}"
+        if validator and validator.role == Role.DOCTOR
+        else None
+    )
     return DocumentOut(
         **_to_list_item(document).model_dump(),
         raw_text=document.raw_text,
         file_path=document.file_path,
         uploaded_by=str(document.uploaded_by) if document.uploaded_by else None,
+        validated_by_name=validated_by_name,
     )
 
 
@@ -167,7 +188,7 @@ class DocumentService:
             document = await self.repository.get(document_oid)
         if document is None:
             raise _not_found()
-        return _to_out(document)
+        return await _to_out(document)
 
     async def create(self, user: User, data: DocumentCreate) -> DocumentOut:
         self._require_staff(user)
@@ -177,12 +198,12 @@ class DocumentService:
             raw_text=data.raw_text,
             uploaded_by=user.id,
         )
-        return _to_out(await self.repository.create(document))
+        return await _to_out(await self.repository.create(document))
 
     async def update(
         self, user: User, document_id: str, data: DocumentUpdate
     ) -> DocumentOut:
-        if user.role not in {Role.DOCTOR, Role.ADMIN}:
+        if user.role not in EDITOR_ROLES:
             raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
         if document.archived_at is not None:
@@ -203,48 +224,39 @@ class DocumentService:
             document.category_code = None
             document.ai_suggested_category_code = None
             document.extracted_fields = []
-        return _to_out(await self.repository.save(document))
+        return await _to_out(await self.repository.save(document))
 
     async def delete(self, user: User, document_id: str) -> None:
-        if user.role not in {Role.DOCTOR, Role.ADMIN}:
+        if user.role not in REVIEWER_ROLES:
             raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
+        if user.role == Role.ADMIN:
+            await self.repository.delete(document)
+            return
         if document.archived_at is not None:
             raise APIError(409, "document_already_archived", "Le document est déjà archivé.")
         document.archived_at = utcnow()
         await self.repository.save(document)
 
     async def extract(self, user: User, document_id: str) -> DocumentExtraction:
-        if user.role not in {Role.DOCTOR, Role.ADMIN}:
+        if user.role not in EDITOR_ROLES:
             raise APIError(403, "role_forbidden", "Rôle non autorisé.")
         document = await self._get_staff_document(document_id)
         self._ensure_active(document)
         if not document.raw_text.strip():
             raise APIError(422, "empty_document_text", "Le document ne contient pas de texte.")
 
-        categories = await self.repository.list_categories()
-        category_data = [
-            {"code": category.code, "label": category.label, "description": category.description}
-            for category in categories
-        ]
         result = await generate_json(
             module="documents",
             system=SYSTEM_PROMPT,
-            user=document_prompt(document.raw_text, category_data),
+            user=document_prompt(document.raw_text),
             output_schema=DocumentExtraction,
         )
 
         fields, warnings = validate_extracted_fields(document.raw_text, result.fields)
-        category_codes = {category.code for category in categories}
-        suggested_category = result.suggested_category_code
-        if suggested_category not in category_codes:
-            if suggested_category is not None:
-                warnings.append("La catégorie proposée n'existe pas; elle a été ignorée.")
-            suggested_category = None
-
         return DocumentExtraction(
             fields=fields,
-            suggested_category_code=suggested_category,
+            suggested_category_code=result.suggested_category_code,
             warnings=[*result.warnings, *warnings],
         )
 
@@ -274,12 +286,6 @@ class DocumentService:
                 "Une valeur à valider n'apparaît pas dans le texte source.",
             )
 
-        categories = await self.repository.list_categories()
-        category_codes = {category.code for category in categories}
-        for code in (data.category_code, data.ai_suggested_category_code):
-            if code is not None and code not in category_codes:
-                raise APIError(422, "invalid_document_category", "Catégorie de document inconnue.")
-
         reviewed_at = utcnow()
         for field in reviewed_fields:
             field.status = data.status
@@ -290,7 +296,7 @@ class DocumentService:
         document.category_code = (
             data.category_code if data.status == AiReviewStatus.VALIDATED else None
         )
-        return _to_out(await self.repository.save(document))
+        return await _to_out(await self.repository.save(document), validator=user)
 
     async def _get_staff_document(self, document_id: str) -> MedicalDocument:
         document = await self.repository.get(self._parse_document_id(document_id))
