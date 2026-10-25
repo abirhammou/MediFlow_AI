@@ -16,9 +16,6 @@
 }
 .notes { white-space: pre-wrap; font-size: .875rem; }
 
-/* Reserved for the AI summary (later phase). */
-.ai-summary-slot { min-height: 96px; margin-bottom: 1rem; border: 1px dashed var(--border); border-radius: var(--radius); }
-
 @media (max-width: 560px) {
   .identity .actions { margin-left: 0; }
 }

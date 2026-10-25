@@ -1,1 +1,103 @@
-@use '../../../styles' as *;
+:host { display: block; }
+
+/* --- En-tête du module --- */
+.module-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  h1 { margin: 0; font-size: 24px; color: #0f172a; }
+  p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
+}
+.module-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* --- Cartes --- */
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.card h2 { margin: 0 0 8px; font-size: 18px; color: #0f172a; }
+.card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.card .head select { padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; }
+
+/* --- Champs de formulaire --- */
+.f { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.f span { font-size: 13px; font-weight: 600; color: #334155; }
+.f input, .f textarea {
+  padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 10px;
+  font: inherit; font-size: 14px; outline: none;
+  &:focus { border-color: #7c3aed; }
+}
+
+/* --- Boutons --- */
+.btn {
+  padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 10px;
+  background: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+  &:hover:not(:disabled) { background: #f8fafc; }
+  &:disabled { opacity: .55; cursor: not-allowed; }
+  &.primary { background: #7c3aed; color: #fff; border-color: #7c3aed; &:hover:not(:disabled) { background: #6d28d9; } }
+  &.danger { color: #b91c1c; border-color: #fecaca; &:hover:not(:disabled) { background: #fef2f2; } }
+  &.sm { padding: 4px 10px; font-size: 12px; }
+}
+
+/* --- Créneaux proposés --- */
+.slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.slot {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px;
+  background: #fff; cursor: pointer; text-align: left;
+  strong { font-size: 13px; color: #0f172a; }
+  small { font-size: 11px; color: #64748b; }
+  &:hover:not(:disabled) { border-color: #7c3aed; background: #faf5ff; }
+}
+
+/* --- Tableau --- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+th { background: #f8fafc; font-weight: 600; color: #475569; }
+.mono { font-family: monospace; font-size: 11px; color: #64748b; }
+.right { text-align: right; }
+
+/* --- Badges de statut --- */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  &[data-status="PENDING"] { background: #fef3c7; color: #92400e; }
+  &[data-status="CONFIRMED"] { background: #dcfce7; color: #166534; }
+  &[data-status="COMPLETED"] { background: #dbeafe; color: #1e40af; }
+  &[data-status="CANCELLED"] { background: #fee2e2; color: #991b1b; }
+  &[data-status="NO_SHOW"] { background: #f3f4f6; color: #374151; }
+}
+
+/* --- Pagination --- */
+.pager { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; }
+
+/* --- Divers --- */
+.muted { color: #6b7280; font-size: 13px; }
+.top { margin-top: 12px; }
+.alert { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; &.error { background: #fee2e2; color: #b91c1c; } }
+
+/* --- Filtres de l'espace admin --- */
+.filters {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px;
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #475569; }
+  label.wide { min-width: 240px; flex: 1; }
+  select, input[type='date'] { padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font: inherit; font-size: 13px; }
+  .reset { align-self: flex-end; }
+}
+
+/* --- Bouton de recherche + dictée --- */
+.actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

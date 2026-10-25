@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.dependencies import require_roles
 from app.modules.auth.models import Role, User
@@ -17,7 +17,7 @@ PREFIX = "/api/reports"
 TAGS = ["reports"]
 
 doctor_only = require_roles(Role.DOCTOR)
-readers = require_roles(Role.DOCTOR, Role.ADMIN, Role.SECRETARY)
+readers = require_roles(Role.DOCTOR, Role.ADMIN, Role.SECRETARY, Role.PATIENT)
 archivers = require_roles(Role.DOCTOR, Role.ADMIN)
 
 
@@ -81,6 +81,26 @@ async def archive_report(
 ) -> ReportOut:
     """Archiver un compte rendu (pas de suppression)."""
     return await service.archive(user, report_id)
+
+
+# ── Export ────────────────────────────────────────────────────────────────────
+
+@router.get("/{report_id}/pdf", responses={200: {"content": {"application/pdf": {}}}})
+async def export_report_pdf(
+    report_id: str,
+    user: User = Depends(readers),
+    service: ReportService = Depends(get_report_service),
+) -> Response:
+    """Télécharger le compte rendu en PDF (sans notes brutes ni avertissements)."""
+    pdf, filename = await service.export_pdf(user, report_id)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",  # donnée médicale : pas de cache
+        },
+    )
 
 
 # ── LLM et validation ─────────────────────────────────────────────────────────

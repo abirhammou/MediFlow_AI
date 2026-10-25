@@ -146,6 +146,37 @@ async def test_secretary_only_sees_finalized_reports(
     assert [item["title"] for item in listing.json()["items"]] == ["Final"]
     assert hidden.status_code == 404
 
+@pytest.mark.parametrize("role", [Role.ADMIN_STAFF])
+async def test_patient_sees_only_own_finalized_reports(
+    api_client, user_factory, doctor, secretary, auth, create_report, fake_llm
+):
+    own_patient = PydanticObjectId()
+    patient = await user_factory(
+        email="patient@example.test", role=Role.PATIENT, patient_id=own_patient
+    )
+    mine = await create_report(doctor, title="Mon compte rendu", patient_id=str(own_patient))
+    draft = await create_report(doctor, title="Brouillon", patient_id=str(own_patient))
+    other = await create_report(doctor, title="Autre patient")
+    for report in (mine, other):
+        await api_client.post(f"/api/reports/{report['id']}/generate", headers=auth(doctor))
+        await api_client.post(f"/api/reports/{report['id']}/finalize", headers=auth(doctor))
+
+    listing = await api_client.get("/api/reports", headers=auth(patient))
+    own = await api_client.get(f"/api/reports/{mine['id']}", headers=auth(patient))
+    foreign = await api_client.get(f"/api/reports/{other['id']}", headers=auth(patient))
+    hidden_draft = await api_client.get(f"/api/reports/{draft['id']}", headers=auth(patient))
+    write = await api_client.post(
+        "/api/reports",
+        headers=auth(patient),
+        json={"patient_id": str(own_patient), "title": "T", "raw_notes": "x" * 30},
+    )
+    as_secretary = await api_client.get(f"/api/reports/{mine['id']}", headers=auth(secretary))
+
+    assert [item["title"] for item in listing.json()["items"]] == ["Mon compte rendu"]
+    assert own.status_code == 200 and own.json()["raw_notes"] == ""
+    assert foreign.status_code == 404 and hidden_draft.status_code == 404
+    assert write.status_code == 403
+    assert as_secretary.json()["raw_notes"] == ""
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 

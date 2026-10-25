@@ -2,6 +2,7 @@ from app.core.config import Settings, settings
 from app.errors import LLMConfigurationError
 from app.llm.providers.anthropic import AnthropicProvider
 from app.llm.providers.base import BaseProvider
+from app.llm.providers.gemini import GeminiProvider
 from app.llm.providers.mock import MockProvider
 from app.llm.providers.openai_compatible import OpenAICompatibleProvider
 
@@ -22,6 +23,8 @@ def provider_for(module: str, config: Settings = settings) -> tuple[BaseProvider
         return MockProvider(), model
     if not api_key:
         raise LLMConfigurationError()
+    if configured == "gemini":
+        return GeminiProvider(api_key), model or "gemini-2.0-flash"
     if not model or not base_url:
         raise LLMConfigurationError("L'URL ou le modèle LLM n'est pas configuré.")
     if configured == "openai_compatible":

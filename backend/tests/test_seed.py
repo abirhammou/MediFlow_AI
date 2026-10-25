@@ -55,3 +55,26 @@ async def test_patient_account_is_linked_to_its_record(db):
 
     assert account.role == Role.PATIENT
     assert (record.first_name, record.last_name) == (account.first_name, account.last_name)
+
+
+async def test_seed_fills_notes_without_overwriting_edits(db):
+    await seed("seed-test-password")
+    edited, emptied = PATIENTS[0], PATIENTS[1]
+    await Patient.find_one(Patient.national_id == edited["national_id"]).set(
+        {Patient.administrative_notes: "Modifiée dans l'application."}
+    )
+    await Patient.find_one(Patient.national_id == emptied["national_id"]).set(
+        {Patient.administrative_notes: None}
+    )
+
+    kept = await seed("seed-test-password")
+    after_keep = await Patient.find_one(Patient.national_id == edited["national_id"])
+    refilled = await Patient.find_one(Patient.national_id == emptied["national_id"])
+    reset = await seed("seed-test-password", reset_notes=True)
+    after_reset = await Patient.find_one(Patient.national_id == edited["national_id"])
+
+    assert kept.notes_updated == 1
+    assert after_keep.administrative_notes == "Modifiée dans l'application."
+    assert refilled.administrative_notes == emptied["administrative_notes"]
+    assert reset.notes_updated == 1
+    assert after_reset.administrative_notes == edited["administrative_notes"]

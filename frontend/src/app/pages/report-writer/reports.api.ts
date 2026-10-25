@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, forkJoin, map, of } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
 
 export type ReportStatus = 'DRAFT' | 'FINAL' | 'ARCHIVED';
 
@@ -58,6 +58,12 @@ export interface ReportStats {
   recent: ReportListItem[]; // 100 derniers brouillons/finalisés, pour le graphique d'activité
 }
 
+/** Patient proposé dans la liste déroulante du médecin. */
+export interface PatientOption {
+  id: string;
+  name: string;
+}
+
 /** Admin : lecture de tous les comptes rendus + archivage (le reste est réservé au médecin). */
 @Injectable({ providedIn: 'root' })
 export class ReportsApi {
@@ -97,6 +103,28 @@ export class ReportsApi {
     return this.http.post<ReportOut>(`${this.base}/${id}/archive`, {});
   }
 
+  /** Télécharge le PDF (passe par HttpClient pour garder l'authentification). */
+  downloadPdf(id: string, title: string): Observable<void> {
+    return this.http.get(`${this.base}/${id}/pdf`, { responseType: 'blob' }).pipe(
+      tap((blob) => {
+        const slug =
+          title
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '')
+            .toLowerCase() || 'compte-rendu';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${slug}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }),
+      map(() => undefined),
+    );
+  }
+
   /** Pas d'endpoint de stats côté backend : on lit les `total` de pages d'un seul élément. */
   stats(): Observable<ReportStats> {
     const one = (status: ReportStatus) => this.list({ status, page: 1, size: 1 }).pipe(map((p) => p.total));
@@ -125,6 +153,24 @@ export class ReportsApi {
         return names;
       }),
       catchError(() => of({} as Record<string, string>)),
+    );
+  }
+
+  /** Patients via le module patients (camelCase, paginé). Erreur ou accès refusé : [] (saisie manuelle de l'ID). */
+  patients(): Observable<PatientOption[]> {
+    const params = new HttpParams().set('size', 100).set('sort', 'lastName');
+    return this.http.get<unknown>('/api/patients', { params }).pipe(
+      map((res) => {
+        const list = (Array.isArray(res) ? res : ((res as { items?: unknown[] })?.items ?? [])) as Record<string, unknown>[];
+        return list
+          .map((p) => {
+            const fullName = [p['firstName'], p['lastName']].filter(Boolean).join(' ');
+            const record = p['recordNumber'] ? ` · ${p['recordNumber']}` : '';
+            return { id: String(p['id'] ?? ''), name: fullName ? fullName + record : '' };
+          })
+          .filter((p) => p.id && p.name);
+      }),
+      catchError(() => of([] as PatientOption[])),
     );
   }
 }

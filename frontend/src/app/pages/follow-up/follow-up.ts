@@ -2,13 +2,25 @@ import { Component, inject, signal, computed } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../shared/icon/icon';
+import { AuthService, Role } from '../../core/auth/auth.service';
+import { Reminders } from './reminders/reminders';
+import { AiFeatures } from './ai-features/ai-features';
+
+interface PatientOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  recordNumber: string;
+}
 
 export interface Task {
   id: string;
   description: string;
   due_date: string;
   status: 'pending' | 'done' | 'cancelled';
+  patient_id: string;
   patient_name: string;
+  patient_record_number: string;
   appointment_date: string;
   appointment_reason: string;
 }
@@ -27,39 +39,92 @@ export interface ReminderDraft {
 
 type StatusFilter = 'all' | 'pending' | 'done' | 'cancelled';
 
+// ── Permissions par rôle ────────────────────────────────────────────────────
+interface RolePermissions {
+  canCreate:         boolean;  // Créer une tâche
+  canEdit:           boolean;  // Modifier description / échéance / statut
+  canDelete:         boolean;  // Supprimer une tâche
+  canGenerateReminder: boolean;// Accès au générateur LLM
+  canSeeAllTasks:    boolean;  // Voir toutes les tâches (sinon filtre patient)
+  label:             string;   // Nom du rôle affiché
+  description:       string;   // Sous-titre de la page selon le rôle
+}
+
+const PERMISSIONS: Record<Role, RolePermissions> = {
+  ADMIN: {
+    canCreate: true, canEdit: true, canDelete: true,
+    canGenerateReminder: true, canSeeAllTasks: true,
+    label: 'Administrateur',
+    description: 'Gestion complète des tâches de suivi de la clinique.',
+  },
+  ADMIN_STAFF: {
+    canCreate: true, canEdit: true, canDelete: true,
+    canGenerateReminder: true, canSeeAllTasks: true,
+    label: 'Gestion administrative',
+    description: 'Gestion complète des tâches de suivi administratif.',
+  },
+  SECRETARY: {
+    canCreate: true, canEdit: true, canDelete: false,
+    canGenerateReminder: true, canSeeAllTasks: true,
+    label: 'Secrétariat',
+    description: 'Création et suivi des tâches. Génération de rappels pour les rendez-vous confirmés.',
+  },
+  DOCTOR: {
+    canCreate: false, canEdit: true, canDelete: false,
+    canGenerateReminder: true, canSeeAllTasks: true,
+    label: 'Médecin',
+    description: 'Suivi des tâches patients. Génération de rappels à partir des rendez-vous confirmés.',
+  },
+  PATIENT: {
+    canCreate: false, canEdit: false, canDelete: false,
+    canGenerateReminder: false, canSeeAllTasks: false,
+    label: 'Patient',
+    description: 'Consulter vos rappels de suivi.',
+  },
+};
+
+const DEFAULT_PERMISSIONS: RolePermissions = PERMISSIONS.PATIENT;
+
 @Component({
   selector: 'app-follow-up',
-  imports: [Icon, ReactiveFormsModule],
+  imports: [Icon, ReactiveFormsModule, Reminders, AiFeatures],
   templateUrl: './follow-up.html',
   styleUrl: './follow-up.scss',
 })
 export class FollowUp {
   private http = inject(HttpClient);
   private fb   = inject(FormBuilder);
+  private auth = inject(AuthService);
 
-  // ── State ────────────────────────────────────────────────────────────────
-  tasks         = signal<Task[]>([]);
-  stats         = signal<TaskStats>({ total: 0, pending: 0, done: 0, cancelled: 0 });
-  loading       = signal(true);
-  apiError      = signal<string | null>(null);
-  statusFilter  = signal<StatusFilter>('all');
+  // ── Permissions du rôle courant ───────────────────────────────────────────
+  readonly perms = computed<RolePermissions>(() => {
+    const role = this.auth.user()?.role as Role | undefined;
+    return role ? (PERMISSIONS[role] ?? DEFAULT_PERMISSIONS) : DEFAULT_PERMISSIONS;
+  });
 
-  showCreateModal  = signal(false);
-  showEditModal    = signal(false);
-  showDetailModal  = signal(false);
-  detailTask       = signal<Task | null>(null);
-  editingTask      = signal<Task | null>(null);
-  submitting       = signal(false);
+  readonly roleLabel = computed(() => this.perms().label);
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  tasks        = signal<Task[]>([]);
+  stats        = signal<TaskStats>({ total: 0, pending: 0, done: 0, cancelled: 0 });
+  loading      = signal(true);
+  apiError     = signal<string | null>(null);
+  statusFilter = signal<StatusFilter>('all');
+
+  showCreateModal = signal(false);
+  showEditModal   = signal(false);
+  showDetailModal = signal(false);
+  detailTask      = signal<Task | null>(null);
+  editingTask     = signal<Task | null>(null);
+  submitting      = signal(false);
 
   reminderResult  = signal<ReminderDraft | null>(null);
   reminderLoading = signal(false);
   reminderError   = signal<string | null>(null);
-
-  // ── Forms ─────────────────────────────────────────────────────────────────
   createForm = this.fb.nonNullable.group({
     description:        ['', [Validators.required, Validators.maxLength(1000)]],
     due_date:           ['', Validators.required],
-    patient_name:       ['', [Validators.required, Validators.maxLength(200)]],
+    patient_id:         ['', Validators.required],
     appointment_date:   ['', Validators.required],
     appointment_reason: ['', [Validators.required, Validators.maxLength(500)]],
   });
@@ -76,15 +141,35 @@ export class FollowUp {
     appointment_reason: ['', Validators.required],
   });
 
-  constructor() {
-    this.loadAll();
+  // ── Patient select — chargement de tous les patients ──────────────────────
+  allPatients     = signal<PatientOption[]>([]);
+  patientsLoading = signal(false);
+  selectedPatient = signal<PatientOption | null>(null);
+
+  loadPatients() {
+    if (this.allPatients().length > 0) return; // déjà chargé
+    this.patientsLoading.set(true);
+    this.http.get<{ items: PatientOption[] }>('/api/patients?size=100&page=1').subscribe({
+      next: res => { this.allPatients.set(res.items); this.patientsLoading.set(false); },
+      error: ()  => this.patientsLoading.set(false),
+    });
   }
+
+  onPatientChange(id: string) {
+    const p = this.allPatients().find(x => x.id === id) ?? null;
+    this.selectedPatient.set(p);
+    this.createForm.patchValue({ patient_id: id });
+  }
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+  activeTab = signal<'tasks' | 'reminders' | 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'weekly'>('tasks');
+
+  constructor() { this.loadAll(); }
 
   // ── Data loading ──────────────────────────────────────────────────────────
   loadAll() {
     this.loading.set(true);
     this.apiError.set(null);
-
     const filter = this.statusFilter();
     const url = filter === 'all'
       ? '/api/follow-up/tasks'
@@ -103,19 +188,21 @@ export class FollowUp {
     });
   }
 
-  setFilter(f: StatusFilter) {
-    this.statusFilter.set(f);
-    this.loadAll();
-  }
+  setFilter(f: StatusFilter) { this.statusFilter.set(f); this.loadAll(); }
 
   // ── Create ────────────────────────────────────────────────────────────────
   openCreate() {
+    if (!this.perms().canCreate) return;
     this.createForm.reset();
+    this.selectedPatient.set(null);
+    this.loadPatients();
     this.showCreateModal.set(true);
   }
 
   submitCreate() {
-    if (this.createForm.invalid) { this.createForm.markAllAsTouched(); return; }
+    if (!this.perms().canCreate || this.createForm.invalid) {
+      this.createForm.markAllAsTouched(); return;
+    }
     this.submitting.set(true);
     this.http.post<Task>('/api/follow-up/tasks', this.createForm.getRawValue()).subscribe({
       next: task => {
@@ -136,6 +223,7 @@ export class FollowUp {
 
   // ── Edit ──────────────────────────────────────────────────────────────────
   openEdit(task: Task) {
+    if (!this.perms().canEdit) return;
     this.editingTask.set(task);
     this.editForm.setValue({
       description: task.description,
@@ -147,13 +235,13 @@ export class FollowUp {
 
   submitEdit() {
     const task = this.editingTask();
-    if (!task) return;
+    if (!task || !this.perms().canEdit) return;
     this.submitting.set(true);
     const v = this.editForm.getRawValue();
-    const payload: Partial<{ description: string; due_date: string; status: string }> = {};
-    if (v.description.trim()) payload.description = v.description.trim();
-    if (v.due_date)            payload.due_date    = v.due_date;
-    if (v.status)              payload.status      = v.status;
+    const payload: Record<string, string> = {};
+    if (v.description.trim()) payload['description'] = v.description.trim();
+    if (v.due_date)            payload['due_date']    = v.due_date;
+    if (v.status)              payload['status']      = v.status;
 
     this.http.patch<Task>(`/api/follow-up/tasks/${task.id}`, payload).subscribe({
       next: updated => {
@@ -169,6 +257,7 @@ export class FollowUp {
 
   // ── Delete ────────────────────────────────────────────────────────────────
   deleteTask(id: string) {
+    if (!this.perms().canDelete) return;
     if (!confirm('Supprimer définitivement cette tâche ?')) return;
     this.http.delete(`/api/follow-up/tasks/${id}`).subscribe({
       next: () => {
@@ -188,18 +277,20 @@ export class FollowUp {
 
   // ── LLM Reminder ──────────────────────────────────────────────────────────
   prefillReminder(task: Task) {
+    if (!this.perms().canGenerateReminder) return;
     this.reminderForm.setValue({
       patient_name:       task.patient_name,
       appointment_date:   task.appointment_date,
       appointment_reason: task.appointment_reason,
     });
     this.reminderResult.set(null);
-    // scroll to reminder section
     setTimeout(() => document.getElementById('reminder-section')?.scrollIntoView({ behavior: 'smooth' }), 100);
   }
 
   generateReminder() {
-    if (this.reminderForm.invalid) { this.reminderForm.markAllAsTouched(); return; }
+    if (!this.perms().canGenerateReminder || this.reminderForm.invalid) {
+      this.reminderForm.markAllAsTouched(); return;
+    }
     this.reminderLoading.set(true);
     this.reminderResult.set(null);
     this.reminderError.set(null);
@@ -218,8 +309,10 @@ export class FollowUp {
 
   readonly today = new Date().toISOString().slice(0, 10);
 
-  badgeClass(status: string)  { return status; }
-  statusLabel(s: string)      { return ({ pending: 'En attente', done: 'Terminé', cancelled: 'Annulé' } as any)[s] ?? s; }
+  statusLabel(s: string) {
+    return ({ pending: 'En attente', done: 'Terminé', cancelled: 'Annulé' } as any)[s] ?? s;
+  }
+
   isInvalid(form: any, field: string) {
     const c = form.get(field);
     return c?.invalid && (c.touched || c.dirty);
