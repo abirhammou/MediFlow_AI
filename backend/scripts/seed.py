@@ -7,9 +7,10 @@ already exist (database/mongo-init.js). Idempotent: every record is looked up by
 key (email, nationalId, appointment reason, FAQ question) and only inserted when missing,
 so running it again never duplicates anything and never resets a changed password.
 Appointment dates are relative to the day of the first run. All data is fictitious.
+Existing patients get the seed's administrative notes when theirs are empty;
+`--reset-notes` also replaces notes that differ (see scripts.seed_dev_patients).
 """
 
-import argparse
 import asyncio
 import sys
 from collections import Counter
@@ -36,7 +37,7 @@ from app.modules.patients.models import (
     Patient,
 )
 from app.security import hash_password
-from scripts.seed_dev_patients import seed_dev_patients
+from scripts.seed_dev_patients import DEV_PATIENTS, argument_parser, seed_dev_patients, sync_notes
 
 DEFAULT_PASSWORD = "MediFlow2026!"
 # Tunisia: UTC+1 all year. Appointment times below are local clinic times.
@@ -108,7 +109,12 @@ PATIENTS: list[dict[str, Any]] = [
         "blood_type": BloodType.A_POS,
         "insurance": Insurance(provider="CNAM", number="CN-100245"),
         "emergency_contact": EmergencyContact(name="Karim Haddad", phone="+216 22 987 654", relation="Époux"),
-        "administrative_notes": "Hypertension suivie depuis 2022. Préfère les rendez-vous le matin.",
+        "administrative_notes": (
+            "Hypertension suivie depuis 2022. Préfère les rendez-vous le matin, avant 10h"
+            " (travaille l'après-midi). Carnet de soins CNAM renouvelé en janvier 2026."
+            " Utilise l'espace patient : rappels par SMS plutôt que par appel."
+            " Son époux est la personne à prévenir."
+        ),
     },
     {
         "national_id": "DEMO-0002",
@@ -120,7 +126,12 @@ PATIENTS: list[dict[str, Any]] = [
         "address": Address(street="5 avenue Habib Bourguiba", city="Sfax", postal_code="3000"),
         "blood_type": BloodType.O_POS,
         "insurance": Insurance(provider="CNAM", number="CN-200871"),
-        "administrative_notes": "Diabète de type 2. Renouvellement d'ordonnance tous les trois mois.",
+        "administrative_notes": (
+            "Diabète de type 2. Renouvellement d'ordonnance tous les trois mois."
+            " Prise en charge CNAM maladie chronique (APCI) valable jusqu'au 31/03/2027 :"
+            " lancer le renouvellement un mois avant. Deux rendez-vous manqués en 2026"
+            " sans prévenir : appeler la veille pour confirmer."
+        ),
     },
     {
         "national_id": "DEMO-0003",
@@ -131,7 +142,12 @@ PATIENTS: list[dict[str, Any]] = [
         "email": "amira.gharbi@example.test",
         "address": Address(city="Sousse", postal_code="4000"),
         "blood_type": BloodType.B_POS,
-        "administrative_notes": "Palpitations signalées, adressée en cardiologie.",
+        "administrative_notes": (
+            "Palpitations signalées, adressée en cardiologie. Pas d'assurance déclarée :"
+            " règlement en espèces, reçu à remettre à chaque consultation. Étudiante,"
+            " disponible le samedi ou en fin de journée. Courrier du cardiologue attendu,"
+            " à classer dès réception."
+        ),
     },
     {
         "national_id": "DEMO-0004",
@@ -144,6 +160,13 @@ PATIENTS: list[dict[str, Any]] = [
         "blood_type": BloodType.AB_NEG,
         "insurance": Insurance(provider="Assurance privée", number="AP-55120"),
         "emergency_contact": EmergencyContact(name="Nadia Jaziri", phone="+216 52 111 222", relation="Fille"),
+        "administrative_notes": (
+            "Assurance privée : accord préalable obligatoire avant tout examen d'imagerie"
+            " (réponse sous 48 h). Mobilité réduite depuis une opération du genou :"
+            " prévoir le cabinet du rez-de-chaussée. Sa fille gère les rendez-vous,"
+            " joignable au +216 52 111 222. Facture de mars 2026 non réglée,"
+            " relance envoyée le 12/04/2026."
+        ),
     },
     {
         "national_id": "DEMO-0005",
@@ -154,6 +177,12 @@ PATIENTS: list[dict[str, Any]] = [
         "email": "nour.mansouri@example.test",
         "address": Address(city="Nabeul", postal_code="8000"),
         "blood_type": BloodType.O_NEG,
+        "administrative_notes": (
+            "Nouvelle patiente, premier contact le 02/09/2026. Carnet de vaccination à"
+            " compléter : rappel prévu dans le mois. Pas d'assurance pour le moment,"
+            " souhaite s'affilier à la CNAM (formulaire à lui remettre). Préfère être"
+            " contactée par email : nour.mansouri@example.test."
+        ),
     },
 ]
 
@@ -208,6 +237,7 @@ FAQ: list[tuple[str, str, str]] = [
 class SeedReport:
     created: Counter
     existing: Counter
+    notes_updated: int = 0
 
 
 async def _ensure_user(spec: dict[str, Any], password_hash: str, report: SeedReport, **extra: Any) -> User:
@@ -234,7 +264,7 @@ def _start_at(today: date, days: int, local_time: time) -> datetime:
     return datetime.combine(today + timedelta(days=days), local_time, tzinfo=CLINIC_TZ).astimezone(UTC)
 
 
-async def seed(password: str = DEFAULT_PASSWORD) -> SeedReport:
+async def seed(password: str = DEFAULT_PASSWORD, *, reset_notes: bool = False) -> SeedReport:
     """Insert the missing demo records. Beanie must be initialised (`init_db`)."""
     report = SeedReport(created=Counter(), existing=Counter())
     password_hash = hash_password(password)
@@ -247,6 +277,7 @@ async def seed(password: str = DEFAULT_PASSWORD) -> SeedReport:
     created, existing = await seed_dev_patients(admin.id)
     report.created["patients"] += created
     report.existing["patients"] += existing
+    report.notes_updated = await sync_notes([*PATIENTS, *DEV_PATIENTS], admin.id, reset=reset_notes)
 
     today = utcnow().astimezone(CLINIC_TZ).date()
     for national_id, doctor_email, days, local_time, status, reason in APPOINTMENTS:
@@ -287,6 +318,7 @@ async def seed(password: str = DEFAULT_PASSWORD) -> SeedReport:
 def _print_report(report: SeedReport, password: str) -> None:
     for kind in ("users", "patients", "appointments", "faq_entries"):
         print(f"  {kind:<13} {report.created[kind]:>2} créé(s), {report.existing[kind]:>2} déjà présent(s)")
+    print(f"  {'notes':<13} {report.notes_updated:>2} mise(s) à jour")
     print("\nComptes de démonstration (mot de passe identique pour tous) :")
     for spec in [*ACCOUNTS, PATIENT_ACCOUNT]:
         state = "" if spec.get("is_active", True) else "  (inactif : à approuver)"
@@ -297,7 +329,7 @@ def _print_report(report: SeedReport, password: str) -> None:
 
 
 async def main() -> int:
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
+    args = argument_parser(__doc__.splitlines()[0]).parse_args()
     if settings.env == "prod":
         print("Refusé : le seed de démonstration ne s'exécute pas avec ENV=prod.", file=sys.stderr)
         return 1
@@ -308,7 +340,7 @@ async def main() -> int:
         await database.command("ping")
         await init_db(database)
         print(f"Seed de la base « {settings.mongodb_db} »…")
-        report = await seed(password)
+        report = await seed(password, reset_notes=args.reset_notes)
     finally:
         await client.close()
     _print_report(report, password)
