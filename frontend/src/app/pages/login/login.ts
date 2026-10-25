@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService, apiErrorMessage } from '../../core/auth/auth.service';
+import { AuthService, apiErrorMessage, homeFor } from '../../core/auth/auth.service';
 import { AuthLayout } from '../../shared/auth-layout/auth-layout';
 import { Icon } from '../../shared/icon/icon';
 
@@ -40,7 +40,7 @@ export class Login {
     this.error.set(null);
     const { identifier, password, remember } = this.form.getRawValue();
     this.auth.login(identifier, password, remember).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: user => this.router.navigateByUrl(homeFor(user)),
       error: err => {
         this.error.set(apiErrorMessage(err));
         this.submitting.set(false);

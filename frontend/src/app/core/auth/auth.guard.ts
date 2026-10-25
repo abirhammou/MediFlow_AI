@@ -12,6 +12,22 @@ export const guestGuard: CanActivateFn = () =>
   !inject(AuthService).isLoggedIn() || inject(Router).createUrlTree(['/dashboard']);
 
 /**
+ * The authenticated shell: a clinic-created patient account on its temporary password
+ * goes to /change-password first (the API refuses everything else meanwhile).
+ */
+export const passwordChangeGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  const check = (user: UserProfile) => !user.must_change_password || router.createUrlTree(['/change-password']);
+  const user = auth.user();
+  if (user) return check(user);
+  return auth.loadProfile().pipe(
+    map(check),
+    catchError(() => of(router.createUrlTree(['/login']))),
+  );
+};
+
+/**
  * Pages limited to some roles (the API enforces them too). After a reload the
  * profile is not known yet: it is loaded first.
  */

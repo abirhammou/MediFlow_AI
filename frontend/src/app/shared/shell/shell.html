@@ -17,7 +17,7 @@
       <a class="nav-item"
          [routerLink]="item.route"
          routerLinkActive="active"
-         [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+         [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' || item.route === '/portal' }"
          (click)="close()">
         @if (item.dot) {
           <span class="nav-dot" [style.background]="item.dot"></span>

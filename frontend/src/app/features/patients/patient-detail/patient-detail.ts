@@ -6,6 +6,7 @@ import { Icon } from '../../../shared/icon/icon';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { ageLabel, formatBirthDate, formatDateTime } from '../birth-date';
 import { PatientPermissions } from '../patient-permissions';
+import { PatientAccountCard } from '../patient-account/patient-account';
 import { PatientChat } from '../patient-chat/patient-chat';
 import { PatientFilesCard } from '../patient-files/patient-files';
 import { PatientHistoryCard } from '../patient-history/patient-history';
@@ -25,6 +26,7 @@ import { PatientService } from '../patient.service';
     PatientReportsCard,
     PatientFilesCard,
     PatientInvoicesCard,
+    PatientAccountCard,
     PatientChat,
   ],
   templateUrl: './patient-detail.html',

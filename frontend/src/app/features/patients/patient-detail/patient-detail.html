@@ -47,6 +47,10 @@
     <app-patient-invoices [patientId]="p.id" />
   }
 
+  @if (perms.canWrite()) {
+    <app-patient-account [patientId]="p.id" />
+  }
+
   <div class="cards">
     <section class="card info">
       <h2>Identité</h2>

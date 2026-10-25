@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
+import { authGuard, guestGuard, passwordChangeGuard, roleGuard } from './core/auth/auth.guard';
 import { BILLING_ROLES } from './features/billing/billing.model';
 import { PATIENT_ROLES } from './features/patients/patient-permissions';
 
@@ -24,12 +24,46 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/signup/signup').then(m => m.Signup),
   },
 
+  {
+    path: 'change-password',
+    title: 'Changer de mot de passe · MediFlow AI',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/change-password/change-password').then(m => m.ChangePassword),
+  },
+
   // ── Authenticated shell (sidebar + topbar) ─────────────────────────
   {
     path: '',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./shared/shell/shell').then(m => m.Shell),
     children: [
+      // Patient portal (PATIENT only; every call is scoped to their own record by the API)
+      {
+        path: 'portal',
+        canActivate: [roleGuard(['PATIENT'])],
+        children: [
+          {
+            path: '',
+            title: 'Mon dossier · MediFlow AI',
+            loadComponent: () => import('./features/portal/portal-home').then(m => m.PortalHome),
+          },
+          {
+            path: 'appointments',
+            title: 'Mes rendez-vous · MediFlow AI',
+            loadComponent: () => import('./features/portal/portal-appointments').then(m => m.PortalAppointments),
+          },
+          {
+            path: 'follow-ups',
+            title: 'Mon suivi · MediFlow AI',
+            loadComponent: () => import('./features/portal/portal-follow-ups').then(m => m.PortalFollowUps),
+          },
+          {
+            path: 'invoices',
+            title: 'Mes factures · MediFlow AI',
+            loadComponent: () => import('./features/portal/portal-invoices').then(m => m.PortalInvoices),
+          },
+        ],
+      },
       {
         path: 'dashboard',
         title: 'Tableau de bord · MediFlow AI',

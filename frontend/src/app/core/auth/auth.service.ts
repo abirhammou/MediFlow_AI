@@ -23,6 +23,14 @@ export interface UserProfile {
   patient_id: string | null;
   created_at: string;
   last_login_at: string | null;
+  /** Clinic-created patient account still on its temporary password. */
+  must_change_password?: boolean;
+}
+
+/** Where a user lands after login: the password change first, then their own space. */
+export function homeFor(user: UserProfile): string {
+  if (user.must_change_password) return '/change-password';
+  return user.role === 'PATIENT' ? '/portal' : '/dashboard';
 }
 
 export interface RegisterPayload {
@@ -98,6 +106,12 @@ export class AuthService {
 
   register(payload: RegisterPayload): Observable<UserProfile> {
     return this.http.post<UserProfile>('/api/auth/register', payload);
+  }
+
+  changePassword(currentPassword: string, newPassword: string): Observable<UserProfile> {
+    return this.http
+      .post('/api/auth/change-password', { current_password: currentPassword, new_password: newPassword })
+      .pipe(switchMap(() => this.loadProfile()));
   }
 
   loadProfile(): Observable<UserProfile> {

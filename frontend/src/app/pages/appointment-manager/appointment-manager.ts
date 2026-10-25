@@ -1,9 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
+import { AuthService } from '../../core/auth/auth.service';
+import { PendingAppointments } from '../../features/appointments/pending-appointments';
 import { Icon } from '../../shared/icon/icon';
 
 @Component({
   selector: 'app-appointment-manager',
-  imports: [Icon],
+  imports: [Icon, PendingAppointments],
   template: `
     <div class="module-page">
       <div class="module-header">
@@ -15,6 +17,10 @@ import { Icon } from '../../shared/icon/icon';
           <p>Rendez-vous et disponibilités</p>
         </div>
       </div>
+      @if (canConfirm()) {
+        <!-- Requests booked from the patient portal (/api/appointments). -->
+        <app-pending-appointments />
+      }
       <div class="coming-soon">
         <app-icon name="calendar" [size]="40" />
         <h2>Module en cours de développement</h2>
@@ -24,4 +30,7 @@ import { Icon } from '../../shared/icon/icon';
   `,
   styleUrl: './appointment-manager.scss',
 })
-export class AppointmentManager {}
+export class AppointmentManager {
+  private auth = inject(AuthService);
+  protected canConfirm = computed(() => ['SECRETARY', 'ADMIN'].includes(this.auth.user()?.role ?? ''));
+}
