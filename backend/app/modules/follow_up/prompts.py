@@ -38,11 +38,10 @@ PRIORITY_SYSTEM_PROMPT = (
 
 def priority_prompt(tasks_json: str, today: str) -> str:
     return (
-        f"Date d'aujourd'hui : {today}\n\n"
-        f"Voici les tâches de suivi en attente :\n{tasks_json}\n\n"
-        "Pour chaque tâche, attribue une priorité (HIGH / MEDIUM / LOW) "
-        "et rédige une courte justification (1 phrase). "
-        "Trie la liste de la priorité la plus haute à la plus basse."
+        f"Date : {today}\n\n"
+        f"Tâches:\n{tasks_json}\n\n"
+        "Pour chaque tâche donne : priority (HIGH/MEDIUM/LOW selon l'échéance) "
+        "et justification (1 phrase). Trie du plus urgent au moins urgent."
     )
 
 

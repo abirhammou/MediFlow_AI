@@ -82,4 +82,9 @@ class GeminiProvider(BaseProvider):
             text = content["candidates"][0]["content"]["parts"][0]["text"]
             return _extract_json(text)
         except (ValueError, KeyError, IndexError, TypeError) as exc:
+            import logging
+            logging.getLogger(__name__).error(
+                "Gemini response parse error: status=%s body=%s exc=%s",
+                response.status_code, response.text[:500], exc
+            )
             raise LLMResponseError() from exc

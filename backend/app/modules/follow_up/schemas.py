@@ -125,14 +125,14 @@ class PriorityLevel(str, Enum):
 
 class PrioritizedTask(BaseModel):
     """Une tâche avec sa priorité évaluée par Gemini."""
-    task_id:           str
-    patient_name:      str
-    appointment_date:  str
+    task_id:            str
+    patient_name:       str
+    appointment_date:   str
     appointment_reason: str
-    due_date:          str
-    status:            str
-    priority:          PriorityLevel
-    justification:     str = Field(description="Explication courte de la priorité (1 phrase)")
+    due_date:           str
+    status:             str
+    priority:           str = Field(description="HIGH, MEDIUM ou LOW")
+    justification:      str = Field(description="Explication courte de la priorité (1 phrase)")
 
 
 class PriorityResponse(BaseModel):
