@@ -1,6 +1,7 @@
 """Demo data for development: one account per role, patients, appointments, FAQ entries
 and, through scripts.seed_modules, the data of every module (medical reports, AI summaries,
-documents, follow-up tasks and reminders, appointment requests, LLM call log).
+documents and patient files, invoices, AI medical summaries, follow-up tasks and
+reminders, appointment requests, LLM call log).
 
 Run from backend/:  .\\.venv\\Scripts\\python -m scripts.seed
 
@@ -443,6 +444,7 @@ KINDS = (
     "faq_entries",
     "llm_interactions",
     "patient_files",
+    "patient_history_summaries",
     "invoices",
     "payments",
 )
@@ -450,8 +452,8 @@ KINDS = (
 
 def _print_report(report: SeedReport, password: str) -> None:
     for kind in KINDS:
-        print(f"  {kind:<20} {report.created[kind]:>3} créé(s), {report.existing[kind]:>3} déjà présent(s)")
-    print(f"  {'notes':<20} {report.notes_updated:>3} mise(s) à jour")
+        print(f"  {kind:<26} {report.created[kind]:>3} créé(s), {report.existing[kind]:>3} déjà présent(s)")
+    print(f"  {'notes':<26} {report.notes_updated:>3} mise(s) à jour")
     print("\nComptes de démonstration (mot de passe identique pour tous) :")
     for spec in [*ACCOUNTS, PATIENT_ACCOUNT]:
         state = "" if spec.get("is_active", True) else "  (inactif : à approuver)"

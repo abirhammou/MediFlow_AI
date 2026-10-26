@@ -1,20 +1,33 @@
+import hashlib
 from collections import Counter
 
+from app.core.models import AiReviewStatus
 from app.core.time import utcnow
 from app.modules.appointments.models import Appointment, AppointmentRequest, AppointmentStatus
 from app.modules.auth.models import Role, User
 from app.modules.billing.models import Invoice, InvoiceStatus, Payment
+from app.modules.documents.guardrails import validate_extracted_fields
 from app.modules.documents.models import MedicalDocument
+from app.modules.documents.schemas import DocumentCategoryCode, ExtractedFieldProposal
 from app.modules.faq.models import FaqEntry
 from app.modules.followup.models import FollowupTask, Reminder
 from app.modules.llm.models import LlmInteraction
-from app.modules.patient_files.models import FileCategory, PatientFile
+from app.modules.patient_files import storage
+from app.modules.patient_files.models import (
+    ExtractionStatus,
+    FileCategory,
+    FileMime,
+    FileType,
+    PatientFile,
+)
+from app.modules.patient_history.models import HistoryScope, PatientHistorySummary
 from app.modules.patients.models import Patient, PatientSummary, SummaryStatus
 from app.modules.reports.guardrails import check_content
 from app.modules.reports.models import MedicalReport, ReportStatus
 from scripts.seed import ACCOUNTS, APPOINTMENTS, FAQ, PATIENTS, seed
 from scripts.seed_clinical_data import CLINICAL_HISTORY
 from scripts.seed_dev_patients import DEV_PATIENTS
+from scripts.seed_document_data import DOCUMENTS
 
 
 async def counts(db) -> dict[str, int]:
@@ -32,6 +45,7 @@ async def counts(db) -> dict[str, int]:
         "reminders": await Reminder.count(),
         "llm_interactions": await LlmInteraction.count(),
         "patient_files": await PatientFile.count(),
+        "patient_history_summaries": await PatientHistorySummary.count(),
         "invoices": await Invoice.count(),
         "payments": await Payment.count(),
     }
@@ -60,11 +74,46 @@ async def test_every_patient_has_administrative_and_medical_files(db, files_dir)
     files = await PatientFile.find_all().to_list()
     categories: dict = {}
     for file in files:
-        categories.setdefault(file.patient_id, set()).add(file.category)
-        assert (files_dir / file.storage_path).read_bytes().startswith(b"%PDF-")
+        categories.setdefault(file.patient_id, []).append(file.category)
+        data = (files_dir / file.storage_path).read_bytes()
+        assert storage.detect_mime(data) == file.mime
+        assert hashlib.sha256(data).hexdigest() == file.sha256 and len(data) == file.size
+        assert file.created_at < utcnow()
+        if file.category == FileCategory.ADMINISTRATIVE:
+            assert file.extracted_text is None
+        elif file.mime == FileMime.PDF:  # images need Tesseract, PDFs have a text layer
+            assert file.extraction_status == ExtractionStatus.DONE and file.extracted_text
 
     assert len(categories) == len(PATIENTS) + len(DEV_PATIENTS)
-    assert all(found == set(FileCategory) for found in categories.values())
+    assert all(set(found) == set(FileCategory) for found in categories.values())
+    assert min(len(found) for found in categories.values()) >= 4
+    assert {FileMime.PDF, FileMime.PNG, FileMime.JPEG} == {file.mime for file in files}
+    imaging = {file.title for file in files if file.file_type == FileType.IMAGING}
+    assert {"IRM du genou droit (images)", "Scanner cérébral (images)"} <= imaging
+
+
+async def test_medical_documents_are_complete_and_pass_the_guardrail(db):
+    await seed("seed-test-password")
+
+    documents = await MedicalDocument.find_all().to_list()
+    codes = {code.value for code in DocumentCategoryCode}
+
+    assert len(documents) == sum(len(docs) for docs in DOCUMENTS.values())
+    assert DOCUMENTS.keys() == CLINICAL_HISTORY.keys()
+    for document in documents:
+        assert document.ai_suggested_category_code in codes
+        assert document.category_code in codes | {None}
+        if document.category_code:  # validated: shown as VALIDATED only with fields
+            assert document.extracted_fields
+        assert len(document.raw_text.splitlines()) >= 8
+        assert "{date}" not in document.raw_text
+        proposals = [
+            ExtractedFieldProposal(name=field.name, value=field.value)
+            for field in document.extracted_fields
+        ]
+        assert validate_extracted_fields(document.raw_text, proposals)[1] == []
+        statuses = {field.status for field in document.extracted_fields}
+        assert statuses <= {AiReviewStatus.VALIDATED, AiReviewStatus.DRAFT}
 
 
 async def test_invoices_in_every_state_with_consistent_payments(db):
@@ -126,6 +175,34 @@ async def test_at_most_one_validated_summary_per_patient(db):
     )
 
     assert validated and max(validated.values()) == 1
+
+
+async def test_history_summaries_cite_current_sources(api_client, user_factory, token_factory):
+    await seed("seed-test-password")
+    doctor = await user_factory(email="history-reader@example.test", role=Role.DOCTOR)
+    headers = {"Authorization": f"Bearer {token_factory(doctor)}"}
+
+    summaries = await PatientHistorySummary.find_all().to_list()
+    validated = Counter(
+        (summary.patient_id, summary.scope, summary.report_id)
+        for summary in summaries
+        if summary.status == SummaryStatus.VALIDATED
+    )
+    assert {summary.status for summary in summaries} == set(SummaryStatus)
+    assert {summary.scope for summary in summaries} == set(HistoryScope)
+    assert max(validated.values()) == 1
+
+    for patient_id in {patient_id for patient_id, _, _ in validated}:
+        response = await api_client.get(
+            f"/api/patients/{patient_id}/history-summaries", headers=headers
+        )
+        assert response.status_code == 200
+        for item in response.json():
+            if item["status"] == "VALIDATED":
+                assert not item["isOutdated"] and item["sources"]
+            if item["scope"] == "TIMELINE":
+                assert item["content"].startswith("Chronologie\n")
+                assert "\nPoints de vigilance\n" in item["content"]
 
 
 async def test_follow_up_page_reads_the_seeded_data(api_client, user_factory, token_factory):

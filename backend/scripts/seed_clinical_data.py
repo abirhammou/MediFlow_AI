@@ -2,8 +2,8 @@
 
 One entry per patient of scripts.seed / scripts.seed_dev_patients (key: CIN, or
 "First Last" when the patient has none), consistent with their administrative notes:
-three visits with their medical report, documents, follow-up tasks and the state of
-the AI summary. All data is fictitious.
+three visits with their medical report, follow-up tasks and the state of the AI
+summary (documents: scripts.seed_document_data). All data is fictitious.
 
 Report sections follow reports.service.SECTIONS (reason, history, examination,
 assessment, plan). Every number in a section also appears in the visit notes, so the
@@ -36,18 +36,8 @@ class Visit:
 
 
 @dataclass(frozen=True)
-class Doc:
-    category: str  # document_categories.code
-    title: str
-    text: str
-    fields: tuple[tuple[str, str], ...] = ()
-    validated: bool = True  # False: AI suggestion and extracted fields still to review
-
-
-@dataclass(frozen=True)
 class History:
     visits: tuple[Visit, Visit, Visit]
-    documents: tuple[Doc, ...]
     tasks: tuple[tuple[str, int, TaskStatus], ...]  # (description, due in days, status)
     points: tuple[str, ...]  # "Points administratifs" of the AI summary
     # VALIDATED, SUPERSEDED (an older validated one + the current one), DRAFT, REJECTED or None
@@ -107,15 +97,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "Kaliémie et créatinine à contrôler. Si la toux persiste : discuter un sartan.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ORDONNANCE", "Ordonnance périndopril", "Périndopril 4 mg : 1 comprimé le matin. "
-                "Traitement pour 3 mois.", (("Médicament", "Périndopril 4 mg"), ("Durée", "3 mois"))),
-            Doc("ANALYSE", "Bilan lipidique et rénal", "Créatinine 7,8 mg/l. LDL cholestérol "
-                "1,65 g/l. Potassium 4,2 mmol/l.", (("LDL", "1,65 g/l"), ("Créatinine", "7,8 mg/l"))),
-            Doc("COMPTE_RENDU", "Échographie cardiaque", "Échographie transthoracique : "
-                "cavités de taille normale, FEVG 62 %, pas de valvulopathie.",
-                (("FEVG", "62 %"),), validated=False),
         ),
         tasks=(
             ("Prescrire la prise de sang de contrôle (kaliémie, créatinine)", 5, TODO),
@@ -177,12 +158,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("ANALYSE", "Hémoglobine glyquée", "HbA1c 7,6 %. Glycémie à jeun 1,42 g/l.",
-                (("HbA1c", "7,6 %"), ("Glycémie à jeun", "1,42 g/l"))),
-            Doc("ADMINISTRATIF", "Accord APCI CNAM", "Prise en charge maladie chronique accordée "
-                "jusqu'au 31/03/2027.", (("Validité", "31/03/2027"),)),
-        ),
         tasks=(
             ("Lancer le renouvellement de l'APCI CNAM", 120, TODO),
             ("Programmer le fond d'œil", 14, IN_PROGRESS),
@@ -232,11 +207,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 status=DRAFT,
             ),
         ),
-        documents=(
-            Doc("COMPTE_RENDU", "Compte rendu du Holter", "Holter ECG 24 h : rythme sinusal, "
-                "FC moyenne 82/min, extrasystoles auriculaires rares.", (("FC moyenne", "82/min"),)),
-            Doc("ANALYSE", "TSH", "TSH 1,9 mUI/l (normale).", (("TSH", "1,9 mUI/l"),), validated=False),
-        ),
         tasks=(("Reprogrammer l'échographie cardiaque annulée", 3, TODO),),
         points=(
             "Pas d'assurance déclarée : règlement en espèces, reçu à chaque consultation.",
@@ -284,12 +254,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "assurance si IRM.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ORDONNANCE", "Ordonnance kinésithérapie", "Kinésithérapie lombaire : "
-                "10 séances.", (("Séances", "10"),)),
-            Doc("ADMINISTRATIF", "Relance facture de mars", "Relance envoyée le 12/04/2026 pour "
-                "la facture de mars 2026.", (("Date de relance", "12/04/2026"),), validated=False),
         ),
         tasks=(
             ("Vérifier le règlement de la facture de mars 2026", -10, IN_PROGRESS),
@@ -346,12 +310,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("ANALYSE", "Sérologies rougeole et hépatite B", "IgG rougeole positives. "
-                "Anticorps anti-HBs négatifs.", (("Rougeole", "Immunisée"), ("Hépatite B", "Non immunisée"))),
-            Doc("CERTIFICAT", "Certificat de vaccination", "Certificat attestant le rappel DTP "
-                "et la première dose d'hépatite B.", validated=False),
-        ),
         tasks=(
             ("Remettre le formulaire d'affiliation CNAM", 7, TODO),
             ("Préparer le certificat de vaccination en anglais", 10, IN_PROGRESS),
@@ -399,16 +357,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "d'antibiotique pour l'instant (allergie pénicilline à vérifier).",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ANALYSE", "Ionogramme et fonction rénale", "Potassium 4,6 mmol/l. Créatinine "
-                "12 mg/l.", (("Potassium", "4,6 mmol/l"), ("Créatinine", "12 mg/l"))),
-            Doc("ORDONNANCE", "Ordonnance du traitement cardiaque", "Anticoagulant, "
-                "bêtabloquant, diurétique et traitement de l'insuffisance cardiaque, matin et "
-                "soir. 3 mois."),
-            Doc("COMPTE_RENDU", "Compte rendu d'hospitalisation", "Hospitalisation de janvier "
-                "2025 : insuffisance cardiaque, fibrillation atriale, FEVG 40 %.",
-                (("FEVG", "40 %"),), validated=False),
         ),
         tasks=(
             ("Regrouper bilan sanguin et cardiologie le même jour", 25, TODO),
@@ -460,12 +408,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 status=DRAFT,
             ),
         ),
-        documents=(
-            Doc("ANALYSE", "Bilan martial", "Ferritine 28 µg/l. Hémoglobine 12,4 g/dl.",
-                (("Ferritine", "28 µg/l"), ("Hémoglobine", "12,4 g/dl"))),
-            Doc("CERTIFICAT", "Certificat d'aptitude 2026", "Certificat d'aptitude à "
-                "l'enseignement pour l'année scolaire 2026-2027.", validated=False),
-        ),
         tasks=(("Préparer le certificat d'aptitude pour l'employeur", 2, TODO),),
         points=(
             "Disponible le mercredi après-midi et pendant les vacances scolaires.",
@@ -516,12 +458,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("CERTIFICAT", "Certificat d'accident du travail", "Certificat initial : entorse "
-                "de l'épaule droite, arrêt de 10 jours.", (("Arrêt", "10 jours"),)),
-            Doc("ORDONNANCE", "Prescription d'échographie", "Échographie de l'épaule droite.",
-                validated=False),
-        ),
         tasks=(
             ("Remettre la copie du certificat d'accident du travail", 4, TODO),
             ("Suivre l'échéancier du bilan sanguin (2 versements restants)", 15, IN_PROGRESS),
@@ -570,12 +506,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "dans 1 mois.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("IMAGERIE", "Densitométrie osseuse", "T-score rachis lombaire -2,8. Col fémoral "
-                "-2,1.", (("T-score rachis", "-2,8"), ("T-score col", "-2,1"))),
-            Doc("ADMINISTRATIF", "Autorisation de récupération des résultats", "Autorisation "
-                "signée le 10/01/2026 au nom de Hichem Dridi."),
         ),
         tasks=(
             ("Scanner la nouvelle attestation médecin de famille CNAM", 10, TODO),
@@ -630,12 +560,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("CERTIFICAT", "Certificat de non-contre-indication au sport", "Handball en "
-                "club, saison 2026-2027."),
-            Doc("ORDONNANCE", "Ordonnance inhalateurs", "Inhalateur de fond matin et soir, "
-                "inhalateur de secours, 2 exemplaires.", (("Exemplaires", "2"),), validated=False),
-        ),
         tasks=(("Envoyer le plan d'action asthme à l'infirmière du collège", -3, DONE),),
         points=(
             "Patiente mineure : rendez-vous avec un parent.",
@@ -679,12 +603,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "le sport. Certificat d'absence fac remis.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("IMAGERIE", "Radiographie thoracique de contrôle", "Poumon gauche à la paroi, "
-                "pas de décollement résiduel."),
-            Doc("CERTIFICAT", "Certificat d'absence", "Absence aux examens du 18 au "
-                "22 août 2026 pour hospitalisation.", validated=False),
         ),
         tasks=(("Vérifier la couverture CNAM (ayant droit expiré ?)", 5, TODO),),
         points=(
@@ -734,12 +652,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 ),
                 DRAFT,
             ),
-        ),
-        documents=(
-            Doc("IMAGERIE", "Échographie thyroïdienne", "Nodule lobe droit 18 mm, TI-RADS 4.",
-                (("Taille", "18 mm"), ("Classification", "TI-RADS 4"))),
-            Doc("ADMINISTRATIF", "Facture détaillée pour l'assureur", "Facture en français "
-                "avec numéro de dossier de l'assureur.", validated=False),
         ),
         tasks=(
             ("Envoyer la copie des comptes rendus au médecin traitant en France", 3, TODO),
@@ -792,12 +704,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 status=DRAFT,
             ),
         ),
-        documents=(
-            Doc("COMPTE_RENDU", "Compte rendu des urgences", "Plaie du cuir chevelu de 3 cm "
-                "suturée. Scanner cérébral normal.", (("Scanner", "Normal"),)),
-            Doc("ORDONNANCE", "Ordonnance antiparkinsonienne", "Lévodopa : 3 prises par jour "
-                "à heures fixes. 3 mois.", validated=False),
-        ),
         tasks=(
             ("Appeler la fille du patient pour confirmer le rendez-vous", 6, TODO),
             ("Transmettre le compte rendu de chute au neurologue", -15, DONE),
@@ -844,12 +750,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "Avis gastro si nouvelle perte de poids.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ANALYSE", "Bilan digestif", "NFS normale. CRP 2 mg/l. Anticorps "
-                "anti-transglutaminase négatifs.", (("CRP", "2 mg/l"),)),
-            Doc("ADMINISTRATIF", "Formulaire d'inscription en ligne", "Formulaire du "
-                "14/07/2026, champ remarques à revoir avec la patiente.", validated=False),
         ),
         tasks=(("Demander la carte d'assurance à la prochaine visite", 30, TODO),),
         points=(
@@ -905,15 +805,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("ANALYSE", "Spirométries comparées", "VEMS 78 % de la théorique après une "
-                "semaine de travail, 91 % après une semaine de congé.",
-                (("VEMS travail", "78 %"), ("VEMS congé", "91 %"))),
-            Doc("CERTIFICAT", "Arrêt de travail", "Arrêt de travail de 5 jours délivré le "
-                "22/09/2026.", (("Durée", "5 jours"),)),
-            Doc("ADMINISTRATIF", "Attestation CNAM provisoire", "Attestation provisoire valable "
-                "jusqu'au 30/11/2026.", validated=False),
-        ),
         tasks=(
             ("Relancer le transfert du dossier CNAM depuis Gabès", 20, IN_PROGRESS),
             ("Écrire au médecin du travail de l'usine", 4, TODO),
@@ -958,14 +849,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "injections. Courrier sage-femme. Revoir dans 1 semaine.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ANALYSE", "Hyperglycémie provoquée orale", "HGPO 75 g : T0 0,98 g/l, "
-                "T1h 1,85 g/l, T2h 1,62 g/l.", (("T0", "0,98 g/l"), ("T1h", "1,85 g/l"), ("T2h", "1,62 g/l"))),
-            Doc("COMPTE_RENDU", "Courrier de la sage-femme", "Grossesse de 24 semaines, "
-                "dépistage du diabète positif.", validated=False),
-            Doc("IMAGERIE", "Échographie du deuxième trimestre", "Croissance fœtale normale.",
-                validated=False),
         ),
         tasks=(
             ("Classer les courriers de la sage-femme et les échographies", 2, TODO),
@@ -1022,12 +905,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 DRAFT,
             ),
         ),
-        documents=(
-            Doc("CERTIFICAT", "Certificats d'absence", "Absence justifiée pour 2 examens de "
-                "design.", (("Examens", "2"),)),
-            Doc("ADMINISTRATIF", "Préférences de contact", "Prénom d'usage, sans civilité. "
-                "Appels après 17h."),
-        ),
         tasks=(("Mettre à jour le prénom d'usage dans les courriers", -5, DONE),),
         points=(
             "Prénom d'usage, sans civilité, à l'accueil et dans les courriers.",
@@ -1072,12 +949,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "Rappel : antiagrégants à ne jamais arrêter. Pilulier proposé.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("COMPTE_RENDU", "Compte rendu de coronarographie", "Sténose serrée de l'IVA "
-                "proximale traitée par un stent actif.", (("Artère", "IVA proximale"),)),
-            Doc("ANALYSE", "Bilan lipidique", "LDL 0,92 g/l. HDL 0,38 g/l.",
-                (("LDL", "0,92 g/l"),), validated=False),
         ),
         tasks=(
             ("Rappeler la règle d'annulation de 24 h", -100, DONE),
@@ -1124,12 +995,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 status=DRAFT,
             ),
         ),
-        documents=(
-            Doc("CERTIFICAT", "Certificat pour la crèche", "Enfant apte à la vie en "
-                "collectivité.", validated=False),
-            Doc("ADMINISTRATIF", "Extrait de naissance", "Déposé le 10/12/2025 pour "
-                "l'inscription CNAM.", (("Dépôt", "10/12/2025"),)),
-        ),
         tasks=(("Récupérer le groupe sanguin auprès de la maternité", 14, TODO),),
         points=(
             "CIN non applicable.",
@@ -1172,12 +1037,6 @@ CLINICAL_HISTORY: dict[str, History] = {
                 "pour le médecin traitant en France. Facture pour l'assurance voyage.",
                 status=DRAFT,
             ),
-        ),
-        documents=(
-            Doc("ORDONNANCE", "Ordonnance d'antibiotique", "Antibiotique pendant 10 jours.",
-                (("Durée", "10 jours"),)),
-            Doc("COMPTE_RENDU", "Courrier au médecin traitant", "Érysipèle de la jambe "
-                "gauche traité, glycémie à surveiller.", validated=False),
         ),
         tasks=(("Envoyer la facture pour l'assurance voyage", 2, TODO),),
         points=(

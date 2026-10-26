@@ -1,10 +1,11 @@
 from datetime import datetime
 
 from beanie import PydanticObjectId
-from beanie.operators import GTE, GT, LT, NE, Eq
+from beanie.operators import GTE, LT, NE, Eq, In
 
 from app.modules.appointments.models import Appointment, AppointmentStatus
 from app.modules.auth.models import Role, User
+from app.modules.followup.models import FollowupTask, TaskStatus
 from app.modules.patients.models import Patient
 
 
@@ -56,27 +57,13 @@ async def count_pending_appointments() -> int:
 
 
 async def count_followup_tasks() -> dict[str, int]:
-    """Compte les tâches FollowUp via Motor (collection non-Beanie)."""
-    try:
-        # Récupère le moteur Motor via le client Beanie
-        import beanie
-        motor_client = beanie.Document.get_settings()  # type: ignore
-    except Exception:
-        pass
-    try:
-        # Accès via pymongo asynchrone : le client Beanie est le même que Motor
-        from pymongo import AsyncMongoClient
-        from app.core.config import settings
-        client = AsyncMongoClient(settings.mongodb_uri)
-        col = client[settings.mongodb_db]["followup_tasks"]
-        pending   = await col.count_documents({"status": "pending"})
-        done      = await col.count_documents({"status": "done"})
-        cancelled = await col.count_documents({"status": "cancelled"})
-        return {"pending": pending, "done": done, "cancelled": cancelled}
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("count_followup_tasks failed: %s", exc)
-        return {"pending": 0, "done": 0, "cancelled": 0}
+    """Follow-up tasks by API status (TODO and IN_PROGRESS both count as pending)."""
+    pending = await FollowupTask.find(
+        In(FollowupTask.status, [TaskStatus.TODO, TaskStatus.IN_PROGRESS])
+    ).count()
+    done = await FollowupTask.find(Eq(FollowupTask.status, TaskStatus.DONE)).count()
+    cancelled = await FollowupTask.find(Eq(FollowupTask.status, TaskStatus.CANCELLED)).count()
+    return {"pending": pending, "done": done, "cancelled": cancelled}
 
 
 async def upcoming_appointments(

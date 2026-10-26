@@ -551,16 +551,20 @@ llm.createIndex({ entityId: 1 }, { name: "idx_llm_entity" });
 // =====================================================================
 // REFERENCE DATA (idempotent upserts)
 // =====================================================================
-[
-  ["ORDONNANCE", "Ordonnance"],
-  ["ANALYSE", "Analyse biologique"],
-  ["IMAGERIE", "Imagerie"],
-  ["CERTIFICAT", "Certificat médical"],
-  ["COMPTE_RENDU", "Compte rendu"],
-  ["ADMINISTRATIF", "Administratif"],
-].forEach(([code, label]) =>
+// Same codes as the MedDoc module (backend/app/modules/documents/prompts.py: DOCUMENT_CATEGORIES)
+const DOCUMENT_CATEGORIES = [
+  ["MEDICAL", "Document médical général"],
+  ["ORDONNANCE", "Ordonnance ou prescription"],
+  ["CERTIFICAT", "Certificat médical ou arrêt de travail"],
+  ["FINANCIER", "Facture ou document financier"],
+  ["CNAM", "Document destiné à la CNAM"],
+  ["ADMINISTRATIF", "Document administratif"],
+];
+DOCUMENT_CATEGORIES.forEach(([code, label]) =>
   categories.updateOne({ code }, { $setOnInsert: { code, label } }, { upsert: true })
 );
+// Codes of the first version of this script, unknown to the MedDoc module
+categories.deleteMany({ code: { $nin: DOCUMENT_CATEGORIES.map(([code]) => code) } });
 
 mediflow.counters.updateOne({ _id: "patient_record" }, { $setOnInsert: { seq: NumberInt(0) } }, { upsert: true });
 

@@ -49,6 +49,7 @@ class DashboardService:
                 DashboardKPI(key="followup_pending",  label="Tâches de suivi en attente",  value=followup.get("pending", 0)),
                 DashboardKPI(key="followup_done",     label="Tâches terminées",            value=followup.get("done", 0)),
                 DashboardKPI(key="total_users",       label="Utilisateurs",                value=await repository.count_users()),
+                DashboardKPI(key="inactive_users",    label="Comptes inactifs ou en attente", value=await repository.count_users(is_active=False)),
                 DashboardKPI(key="users_by_role",     label="Répartition par rôle",        value=await repository.count_users_by_role()),
                 DashboardKPI(key="appt_breakdown",    label="RDV par statut",              value=appt_breakdown),
             ],

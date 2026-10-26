@@ -1,9 +1,10 @@
 """Demo data for every module, built on the seeded users and patients (run by scripts.seed).
 
 For each patient of scripts.seed_clinical_data: three past visits (COMPLETED appointments)
-with their medical report (FINAL, ARCHIVED, DRAFT), an upcoming appointment, AI summaries,
-medical documents, follow-up tasks and reminders; plus free-text appointment requests and
-the LLM call log that goes with all of it.
+with their medical report (FINAL, ARCHIVED, DRAFT), an upcoming appointment, AI summaries
+of the record, medical documents (MedDoc and patient files, scripts.seed_files), invoices,
+AI medical summaries for doctors (scripts.seed_history), follow-up tasks and reminders;
+plus free-text appointment requests and the LLM call log that goes with all of it.
 
 Idempotent like scripts.seed: each record is looked up by a natural key and only inserted
 when missing. Dates are relative to the day of the first run; insert hooks stamp "now",
@@ -28,6 +29,7 @@ from app.modules.appointments.models import (
 )
 from app.modules.auth.models import User
 from app.modules.documents.models import DocumentCategory, ExtractedField, MedicalDocument
+from app.modules.documents.prompts import DOCUMENT_CATEGORIES
 from app.modules.followup.models import FollowupTask, Reminder, ReminderStatus
 from app.modules.llm.models import LlmInteraction, LlmModule
 from app.modules.patients.dates import CLINIC_TZ, clinic_today
@@ -41,22 +43,14 @@ from app.modules.reports.schemas import StructuredReport
 from app.modules.reports.service import SECTIONS, render
 from scripts.seed_billing import seed_invoices
 from scripts.seed_clinical_data import APPOINTMENT_REQUESTS, BENALI, CLINICAL_HISTORY, History
-from scripts.seed_files import seed_patient_files
+from scripts.seed_document_data import DOCUMENTS
+from scripts.seed_files import Rendered, prescriber, render_document, seed_patient_files
+from scripts.seed_history import HistorySeeder
 
 DOCTORS = {BENALI: "dr.benali@mediflow.local", "T": "dr.trabelsi@mediflow.local"}
 SECRETARY = "secretariat@mediflow.local"
 ADMIN_STAFF = "gestion@mediflow.local"
 PATIENT_EMAIL = "patient@mediflow.local"
-
-# Same reference data as database/mongo-init.js (in case the database was created without it).
-DOCUMENT_CATEGORIES = [
-    ("ORDONNANCE", "Ordonnance"),
-    ("ANALYSE", "Analyse biologique"),
-    ("IMAGERIE", "Imagerie"),
-    ("CERTIFICAT", "Certificat médical"),
-    ("COMPTE_RENDU", "Compte rendu"),
-    ("ADMINISTRATIF", "Administratif"),
-]
 
 REPORT_MODEL = "openai/gpt-oss-20b"
 DEFAULT_MODEL = "gemini/gemini-3.8-flash"
@@ -121,16 +115,41 @@ class ModuleSeeder:
 
     async def run(self) -> None:
         await self._categories()
+        history_seeder = HistorySeeder(self._log, self.created, self.existing)
         for index, (key, history) in enumerate(CLINICAL_HISTORY.items()):
             patient = self.patients[key]
+            reports_before = len(self.reports)
             visits = await self._visits(index, patient, history)
             await self._summaries(patient, history)
-            await self._documents(patient, history, visits)
-            await seed_patient_files(
-                patient, history, self.users[SECRETARY], self.created, self.existing
-            )
+            documents = [
+                render_document(
+                    doc,
+                    patient,
+                    self._doctor(prescriber(history, doc)),
+                    self.today - timedelta(days=doc.days_ago),
+                )
+                for doc in DOCUMENTS[key]
+            ]
+            await self._documents(patient, documents)
+            # Invoices first: the latest one is also stored as a patient file.
             await seed_invoices(
-                index, patient, visits, self.users, self.users[SECRETARY], self.created, self.existing
+                index,
+                patient,
+                visits,
+                self.users,
+                self.users[SECRETARY],
+                self.created,
+                self.existing,
+            )
+            await seed_patient_files(
+                patient, documents, self.users[SECRETARY], self.today, self.created, self.existing
+            )
+            # After the reports and the files: the summaries cite them.
+            await history_seeder.seed(
+                patient,
+                history.summary,
+                self.reports[reports_before:],
+                self._doctor(history.visits[-1].doctor),
             )
             await self._tasks(index, patient, history, visits[-1])
         await self._appointment_requests()
@@ -310,21 +329,24 @@ class ModuleSeeder:
             if not self._found("document_categories", category):
                 await DocumentCategory(code=code, label=label).insert()
 
-    async def _documents(
-        self, patient: Patient, history: History, visits: list[Appointment]
-    ) -> None:
+    async def _documents(self, patient: Patient, documents: list[Rendered]) -> None:
         secretary = self.users[SECRETARY].id
-        for number, doc in enumerate(history.documents):
+        for rendered in documents:
+            doc = rendered.doc
             document = await MedicalDocument.find_one(
                 Eq(MedicalDocument.patient_id, patient.id), Eq(MedicalDocument.title, doc.title)
             )
             if not self._found("medical_documents", document):
-                uploaded = visits[number % len(visits)].end_at + timedelta(hours=1)
+                received = datetime.combine(
+                    rendered.day + timedelta(days=1), time(9), tzinfo=CLINIC_TZ
+                ).astimezone(UTC)
+                uploaded = min(received, utcnow())
+                reviewed = min(uploaded + timedelta(days=1), utcnow())
                 status = AiReviewStatus.VALIDATED if doc.validated else AiReviewStatus.DRAFT
                 document = await MedicalDocument(
                     patient_id=patient.id,
                     title=doc.title,
-                    raw_text=doc.text,
+                    raw_text=rendered.text,
                     category_code=doc.category if doc.validated else None,
                     ai_suggested_category_code=doc.category,
                     extracted_fields=[
@@ -333,15 +355,13 @@ class ModuleSeeder:
                             value=value,
                             status=status,
                             validated_by=secretary if doc.validated else None,
-                            validated_at=uploaded + timedelta(days=1) if doc.validated else None,
+                            validated_at=reviewed if doc.validated else None,
                         )
-                        for name, value in doc.fields
+                        for name, value in rendered.fields
                     ],
                     uploaded_by=secretary,
                 ).insert()
-                await document.set(
-                    {"createdAt": uploaded, "updatedAt": uploaded + timedelta(days=1)}
-                )
+                await document.set({"createdAt": uploaded, "updatedAt": reviewed})
             self.documents.append(document)
 
     # ── Follow-up tasks ───────────────────────────────────────────────────────

@@ -57,12 +57,14 @@ Le seed remplit aussi chaque module, avec des données fictives cohérentes avec
 | Rendez-vous | 3 consultations passées (`COMPLETED`) par patient et un prochain rendez-vous ; demandes en texte libre (`appointment_requests`) |
 | ReportWriter | 3 comptes rendus par patient, chacun lié à sa consultation : `FINAL`, `ARCHIVED`, `DRAFT` (avec contenu à finaliser, ou notes brutes seules pour essayer « Générer ») |
 | Dossiers patients | Résumés IA : validé (avec parfois un ancien `SUPERSEDED`), brouillon à relire, rejeté ; quelques patients sans résumé pour tester la génération |
-| MedDoc | 2 à 3 documents par patient, catégorie validée ou seulement suggérée par l'IA |
+| Fichiers du dossier | 4 à 8 vrais fichiers par patient dans `backend/var/files` : comptes rendus d'IRM, de scanner, de radiographie, d'échographie et d'ECG en PDF avec l'image de l'examen en JPEG, résultats de laboratoire en PDF, ordonnances et certificats « scannés » en PNG ; côté administratif, attestation d'assurance et dernière facture |
+| Synthèses médicales IA | Synthèse chronologique du dossier et résumé du dernier compte rendu finalisé, avec leurs citations `[S1]` : validées et à jour, ancienne version `SUPERSEDED`, brouillon, rejetée ; quelques patients sans synthèse pour tester la génération |
+| MedDoc | 2 à 4 documents complets par patient (`backend/scripts/seed_document_data.py`) : bilans biologiques, IRM, scanners, échographies, ordonnances, certificats, courriers, papiers CNAM et factures ; catégorie validée ou seulement suggérée par l'IA |
 | Suivi | Tâches de suivi et rappels des prochains rendez-vous confirmés |
 | FAQ | Entrées approuvées et en attente de validation |
-| Journal LLM | `llm_interactions` liées aux comptes rendus, résumés, documents et rappels (au moins un jour d'ancienneté : les quotas horaires restent libres) |
+| Journal LLM | `llm_interactions` liées aux comptes rendus, résumés, synthèses, questions au dossier, documents et rappels (au moins un jour d'ancienneté : les quotas horaires restent libres) |
 
-Sur une base existante, relancer d'abord `mongo-init.js` (voir [Base de données](#base-de-données)) pour mettre à jour les validateurs, puis le seed : seules les données manquantes sont ajoutées.
+Sur une base existante, relancer d'abord `mongo-init.js` (voir [Base de données](#base-de-données)) pour mettre à jour les validateurs et les catégories MedDoc, puis le seed : seules les données manquantes sont ajoutées.
 
 **2. API (terminal 1)**
 

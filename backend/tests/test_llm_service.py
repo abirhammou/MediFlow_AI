@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import Settings
 from app.errors import LLMConfigurationError, LLMResponseError
+from app.llm.anonymizer import anonymize
 from app.llm.providers.openai_compatible import OpenAICompatibleProvider
 from app.llm.registry import provider_for
 from app.llm.service import generate_json
@@ -52,6 +53,21 @@ async def test_service_anonymizes_and_retries_invalid_json(monkeypatch):
     assert "+33 6 12 34 56 78" not in calls[0][1]
     assert "[EMAIL]" in calls[0][1]
     assert "[TÉLÉPHONE]" in calls[0][1]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Appeler le 98 765 432", "Appeler le 98765432", "Appeler le 98 76 54 32", "+216 51 964 422"],
+)
+def test_local_phone_numbers_are_masked(text):
+    assert anonymize(text).endswith("[TÉLÉPHONE]")
+
+
+@pytest.mark.parametrize(
+    "text", ["RDV le 2026-10-30 à 09:30", "Dossier PAT-2026-00001", "Montant 1 250 000 millimes"]
+)
+def test_dates_and_record_numbers_are_kept(text):
+    assert anonymize(text) == text
 
 
 @pytest.mark.asyncio

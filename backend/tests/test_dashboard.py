@@ -6,6 +6,7 @@ from app.core.sequence import next_record_number
 from app.core.time import utc_midnight, utcnow
 from app.modules.appointments.models import Appointment, AppointmentStatus
 from app.modules.auth.models import Role, User
+from app.modules.followup.models import FollowupTask, TaskStatus
 from app.modules.patients.models import Gender, Patient
 
 
@@ -72,12 +73,20 @@ async def test_staff_dashboard_counts_patients_and_today_appointments(
     await make_appointment(patient, doctor, noon)
     await make_appointment(patient, doctor, noon + timedelta(hours=1), status=AppointmentStatus.CANCELLED)
     await make_appointment(patient, doctor, noon - timedelta(days=1))
+    await make_appointment(patient, doctor, noon + timedelta(hours=2), status=AppointmentStatus.CONFIRMED)
+    for status in (TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE):
+        await FollowupTask(description="Rappeler le patient", status=status).insert()
 
     response, body, metrics = await summary(api_client, auth(staff))
 
     assert response.status_code == 200
     assert body["role"] == role.value
-    assert metrics == {"patients": 1, "appointments_today": 1}
+    assert metrics == {
+        "patients": 1,
+        "appointments_today": 2,
+        "confirmed_today": 1,
+        "followup_pending": 2,
+    }
 
 
 async def test_patient_dashboard_lists_only_own_upcoming_appointments(
