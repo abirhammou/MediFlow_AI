@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+﻿from fastapi import APIRouter, Depends, Query, status
 
 from app.dependencies import require_roles
 from app.modules.auth.models import Role, User
@@ -15,6 +15,7 @@ from app.modules.reports.service import ReportService
 router = APIRouter()
 PREFIX = "/api/reports"
 TAGS = ["reports"]
+LLM_ENABLED = False
 
 doctor_only = require_roles(Role.DOCTOR)
 readers = require_roles(Role.DOCTOR, Role.ADMIN, Role.SECRETARY)
@@ -25,7 +26,7 @@ def get_report_service() -> ReportService:
     return ReportService()
 
 
-# ── CRUD ──────────────────────────────────────────────────────────────────────
+# â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("", response_model=ReportOut, status_code=status.HTTP_201_CREATED)
 async def create_report(
@@ -33,7 +34,7 @@ async def create_report(
     user: User = Depends(doctor_only),
     service: ReportService = Depends(get_report_service),
 ) -> ReportOut:
-    """Créer un compte rendu (brouillon) à partir des notes brutes du médecin."""
+    """CrÃ©er un compte rendu (brouillon) Ã  partir des notes brutes du mÃ©decin."""
     return await service.create(user, data)
 
 
@@ -47,7 +48,7 @@ async def list_reports(
     user: User = Depends(readers),
     service: ReportService = Depends(get_report_service),
 ) -> ReportPage:
-    """Consulter les comptes rendus. Les archivés n'apparaissent qu'avec status=ARCHIVED."""
+    """Consulter les comptes rendus. Les archivÃ©s n'apparaissent qu'avec status=ARCHIVED."""
     return await service.list(
         user, status=status_filter, patient_id=patient_id, text=q, page=page, size=size
     )
@@ -69,7 +70,7 @@ async def update_report(
     user: User = Depends(doctor_only),
     service: ReportService = Depends(get_report_service),
 ) -> ReportOut:
-    """Modifier un brouillon. Modifier les notes efface le contenu généré devenu obsolète."""
+    """Modifier un brouillon. Modifier les notes efface le contenu gÃ©nÃ©rÃ© devenu obsolÃ¨te."""
     return await service.update(user, report_id, data)
 
 
@@ -83,7 +84,7 @@ async def archive_report(
     return await service.archive(user, report_id)
 
 
-# ── LLM et validation ─────────────────────────────────────────────────────────
+# â”€â”€ LLM et validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("/{report_id}/generate", response_model=ReportOut)
 async def generate_report(
@@ -91,7 +92,7 @@ async def generate_report(
     user: User = Depends(doctor_only),
     service: ReportService = Depends(get_report_service),
 ) -> ReportOut:
-    """Structurer les notes avec le LLM. Seules les notes sont envoyées ; `warnings` liste
+    """Structurer les notes avec le LLM. Seules les notes sont envoyÃ©es ; `warnings` liste
     les valeurs absentes des notes."""
     return await service.generate(user, report_id)
 
@@ -105,3 +106,4 @@ async def finalize_report(
 ) -> ReportOut:
     """Valider le compte rendu : il passe en FINAL et n'est plus modifiable."""
     return await service.finalize(user, report_id, data)
+

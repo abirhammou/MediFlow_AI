@@ -1,3 +1,4 @@
+
 import pytest
 from fastapi.testclient import TestClient
 from pymongo import AsyncMongoClient
@@ -21,7 +22,10 @@ async def test_health_pings_mongo(client, db):
 
 @pytest.mark.asyncio
 async def test_health_returns_503_when_mongo_is_down(client):
-    unreachable = AsyncMongoClient("mongodb://127.0.0.1:1", serverSelectionTimeoutMS=200)
+    unreachable = AsyncMongoClient(
+        "mongodb://127.0.0.1:1",
+        serverSelectionTimeoutMS=200,
+    )
     app.dependency_overrides[get_db] = lambda: unreachable["mediflow"]
     try:
         response = await client.get("/api/health")
@@ -38,7 +42,10 @@ async def test_llm_status_never_exposes_key(client):
     response = await client.get("/api/llm/status")
 
     assert response.status_code == 200
-    assert response.json()["template"] == {"provider": "mock", "key_configured": False}
+    assert response.json()["template"] == {
+        "provider": "mock",
+        "key_configured": False,
+    }
     assert set(response.json()) == {"documents", "follow_up", "template"}
     assert "api_key" not in response.text
 
@@ -54,10 +61,7 @@ async def test_documents_module_returns_typed_501(client):
 def test_openapi_contains_only_discovered_module_routes():
     paths = app.openapi()["paths"]
 
-    assert "/api/documents/" in paths
-    assert "/api/notes/" in paths
-    assert "/api/llm/status" in paths
-    assert set(paths) == {
+    expected_paths = {
         "/api/health",
         "/api/documents/",
         "/api/notes/",
@@ -83,9 +87,20 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/patients/{patient_id}",
         "/api/patients/{patient_id}/restore",
         "/api/follow-up/tasks",
+        "/api/follow-up/tasks/stats",
         "/api/follow-up/tasks/{task_id}",
         "/api/follow-up/reminders/generate",
+        "/api/reports",
+        "/api/reports/{report_id}",
+        "/api/reports/{report_id}/generate",
+        "/api/reports/{report_id}/finalize",
+        "/api/reports/{report_id}/archive",
     }
+
+    assert "/api/documents/" in paths
+    assert "/api/notes/" in paths
+    assert "/api/llm/status" in paths
+    assert set(paths) == expected_paths
 
 
 def test_application_lifespan(monkeypatch, app_mongodb_uri):
@@ -93,4 +108,7 @@ def test_application_lifespan(monkeypatch, app_mongodb_uri):
     monkeypatch.setattr(settings, "mongodb_uri", app_mongodb_uri)
 
     with TestClient(app) as test_client:
-        assert test_client.get("/api/health").json() == {"status": "ok", "database": "ok"}
+        assert test_client.get("/api/health").json() == {
+            "status": "ok",
+            "database": "ok",
+        }

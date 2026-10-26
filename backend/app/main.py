@@ -1,7 +1,8 @@
-from collections.abc import AsyncIterator
+﻿from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -34,10 +35,24 @@ app.add_middleware(
 register_error_handlers(app)
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+@app.get("/api/health")
+async def health(db=Depends(get_db)):
+    try:
+        await db.command("ping")
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "database_unavailable",
+                "status": "error",
+            },
+        )
 
-
+    return {
+        "status": "ok",
+        "database": "ok",
+    }
 include_discovered_routers(app)
 app.include_router(llm_router, prefix="/api/llm", tags=["llm"])
+
+
