@@ -365,16 +365,32 @@ async def test_doctor_archives_and_admin_permanently_deletes_documents(
     assert admin_document_after_delete.status_code == 404
 
 
-async def test_secretary_cannot_update_document(
+async def test_secretary_can_update_and_extract_but_not_review_document(
     api_client, doctor, secretary, auth, create_document
 ):
     document = await create_document(doctor)
-    response = await api_client.patch(
+    updated = await api_client.patch(
         f"/api/documents/{document['id']}",
         headers=auth(secretary),
         json={"title": "Titre modifié"},
     )
-    assert response.status_code == 403
+    extracted = await api_client.post(
+        f"/api/documents/{document['id']}/extract",
+        headers=auth(secretary),
+    )
+    reviewed = await api_client.post(
+        f"/api/documents/{document['id']}/review",
+        headers=auth(secretary),
+        json={
+            "status": "VALIDATED",
+            "fields": [{"name": "résultat", "value": "normal"}],
+        },
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Titre modifié"
+    assert extracted.status_code == 200
+    assert reviewed.status_code == 403
 
 
 async def test_patient_history_is_own_validated_documents_only(
