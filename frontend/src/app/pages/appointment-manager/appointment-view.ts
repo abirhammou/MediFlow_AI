@@ -9,7 +9,6 @@ import { ToastService } from '../../shared/toast/toast.service';
 import {
   Appointment, AppointmentStatus, AppointmentsApi, ParseResult, STATUS_LABELS, Slot,
 } from './appointments.api';
-import { DirectoryService, DoctorOption, PatientOption } from './directory.service';
 import { VoiceButton } from './voice-button';
 
 import { PatientPicker } from './patient-picker';
@@ -197,7 +196,6 @@ export class AppointmentView implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly cdr = inject(ChangeDetectorRef);
-  readonly directory = inject(DirectoryService);
 
   // On initialise le mode à 'patient' par défaut, puis on le met à jour dans ngOnInit
   readonly mode = signal<ViewMode>('patient');
