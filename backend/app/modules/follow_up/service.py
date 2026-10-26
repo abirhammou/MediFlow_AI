@@ -152,7 +152,8 @@ class TaskService:
     # ── Priorité ──────────────────────────────────────────────────────────────
 
     async def prioritize_tasks(self) -> PriorityResponse:
-        """Gemini classe les tâches pending par priorité (HIGH/MEDIUM/LOW)."""
+        """Gemini classe les tâches pending par priorité.
+        Fallback local si Gemini est indisponible."""
         import json as _json
         from datetime import date as _date
 
@@ -172,15 +173,58 @@ class TaskService:
             for doc in docs
         ]
 
-        return await generate_json(
-            module="follow_up",
-            system=PRIORITY_SYSTEM_PROMPT,
-            user=priority_prompt(
-                tasks_json=_json.dumps(tasks_data, ensure_ascii=False, indent=2),
-                today=_date.today().isoformat(),
-            ),
-            output_schema=PriorityResponse,
-        )
+        try:
+            return await generate_json(
+                module="follow_up",
+                system=PRIORITY_SYSTEM_PROMPT,
+                user=priority_prompt(
+                    tasks_json=_json.dumps(tasks_data, ensure_ascii=False, indent=2),
+                    today=_date.today().isoformat(),
+                ),
+                output_schema=PriorityResponse,
+            )
+        except Exception:
+            # Fallback : calcul local des priorités selon la date d'échéance
+            return self._local_prioritize(tasks_data)
+
+    def _local_prioritize(self, tasks_data: list[dict]) -> PriorityResponse:
+        """Calcul local des priorités sans LLM — basé sur la date d'échéance."""
+        from datetime import date as _date
+        from app.modules.follow_up.schemas import PrioritizedTask
+        today = _date.today().isoformat()
+
+        def _priority(due_date: str) -> tuple[str, str]:
+            if not due_date:
+                return "MEDIUM", "Pas de date d'échéance définie."
+            diff = (
+                _date.fromisoformat(due_date) - _date.today()
+            ).days if due_date >= "2000" else 999
+            if diff < 0:
+                return "HIGH", f"Tâche en retard de {-diff} jour(s)."
+            if diff == 0:
+                return "HIGH", "Échéance aujourd'hui — urgence maximale."
+            if diff <= 3:
+                return "HIGH", f"Échéance dans {diff} jour(s) — urgent."
+            if diff <= 7:
+                return "MEDIUM", f"Échéance dans {diff} jour(s) — priorité modérée."
+            return "LOW", f"Échéance dans {diff} jour(s) — priorité faible."
+
+        result = []
+        for t in tasks_data:
+            priority, justification = _priority(t.get("due_date", ""))
+            result.append(PrioritizedTask(
+                task_id=t["task_id"],
+                patient_name=t["patient_name"],
+                appointment_date=t["appointment_date"],
+                appointment_reason=t["appointment_reason"],
+                due_date=t.get("due_date", ""),
+                status=t.get("status", "pending"),
+                priority=priority,
+                justification=justification,
+            ))
+
+        result.sort(key=lambda x: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(x.priority, 1))
+        return PriorityResponse(tasks=result)
 
     # ── 1. Résumé historique patient ─────────────────────────────────────────
 
