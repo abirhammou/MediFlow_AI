@@ -12,6 +12,7 @@ import {
 import { AppointmentStats, StatsData } from './appointment-stats';
 import { PatientPicker } from './patient-picker';
 import { VoiceButton } from './voice-button';
+import { DirectoryService } from './directory.service';
 
 interface PatientOption {
   id: string;
@@ -144,8 +145,8 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
                 @for (a of items(); track a.id) {
                   <tr>
                     <td>{{ a.start_at | date: 'dd/MM/yyyy HH:mm' }}</td>
-                    @if (mode() !== 'patient') { <td>{{ a.patient_id }}</td> }
-                    @if (mode() !== 'doctor') { <td>{{ a.doctor_id }}</td> }
+                    @if (mode() !== 'patient') { <td>{{ directory.patientName(a.patient_id) }}</td> }
+                    @if (mode() !== 'doctor')  { <td>{{ directory.doctorName(a.doctor_id) }}</td> }
                     <td>{{ a.reason || '—' }}</td>
                     <td><span class="badge" [attr.data-status]="a.status">{{ label(a.status) }}</span></td>
                     <td class="right">
@@ -182,7 +183,8 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
   `,
 })
 export class AppointmentView implements OnInit {
-  private readonly api = inject(AppointmentsApi);
+  private readonly api       = inject(AppointmentsApi);
+  readonly          directory = inject(DirectoryService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -231,6 +233,8 @@ export class AppointmentView implements OnInit {
     if (this.mode() === 'admin') {
       this.refreshStats();
     }
+    // Charger les médecins pour afficher leurs noms
+    this.directory.loadDoctors().subscribe();
     this.reload(1);
   }
 
@@ -301,6 +305,8 @@ export class AppointmentView implements OnInit {
         this.total.set(p.total);
         this.page.set(p.page);
         this.loading.set(false);
+        // Résoudre les noms des patients et médecins
+        this.directory.resolvePatients(p.items.map(a => a.patient_id));
       },
       error: e => {
         this.error.set(apiErrorMessage(e));

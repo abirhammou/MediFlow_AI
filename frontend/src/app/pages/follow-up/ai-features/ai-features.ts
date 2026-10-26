@@ -72,7 +72,11 @@ export class AiFeatures implements OnChanges {
       patient_id: this.summaryForm.value.patient_id, patient_name: this._summaryPatientName,
     }).subscribe({
       next: r  => { this.summaryResult.set(r); this.summaryLoading.set(false); },
-      error: () => { this.summaryError.set('Erreur Gemini.'); this.summaryLoading.set(false); },
+      error: (err) => {
+        const msg = err?.error?.detail ?? 'Erreur Gemini.';
+        this.summaryError.set(err?.status === 429 ? '⏳ Quota Gemini dépassé — réessayez dans 1 minute.' : msg);
+        this.summaryLoading.set(false);
+      },
     });
   }
 
@@ -103,7 +107,7 @@ export class AiFeatures implements OnChanges {
       next_appointment: v.next_appointment, next_reason: v.next_reason,
     }).subscribe({
       next: r  => { this.noshowResult.set(r); this.noshowLoading.set(false); },
-      error: () => { this.noshowError.set('Erreur Gemini.'); this.noshowLoading.set(false); },
+      error: (err) => { this.noshowError.set(this._geminiError(err)); this.noshowLoading.set(false); },
     });
   }
 
@@ -126,7 +130,7 @@ export class AiFeatures implements OnChanges {
     this.scheduleLoading.set(true); this.scheduleResult.set([]); this.scheduleError.set(null);
     this.http.post<ScheduleResponse>('/api/follow-up/ai/schedule', this.scheduleForm.getRawValue()).subscribe({
       next: r  => { this.scheduleResult.set(r.calls); this.scheduleLoading.set(false); },
-      error: () => { this.scheduleError.set('Erreur Gemini.'); this.scheduleLoading.set(false); },
+      error: (err) => { this.scheduleError.set(this._geminiError(err)); this.scheduleLoading.set(false); },
     });
   }
 
@@ -161,7 +165,7 @@ export class AiFeatures implements OnChanges {
       appointment_date: v.appointment_date, appointment_reason: v.appointment_reason,
     }).subscribe({
       next: r  => { this.adaptiveResult.set(r); this.adaptiveLoading.set(false); },
-      error: () => { this.adaptiveError.set('Erreur Gemini.'); this.adaptiveLoading.set(false); },
+      error: (err) => { this.adaptiveError.set(this._geminiError(err)); this.adaptiveLoading.set(false); },
     });
   }
 
@@ -179,7 +183,7 @@ export class AiFeatures implements OnChanges {
     this.lostLoading.set(true); this.lostResult.set([]); this.lostError.set(null);
     this.http.post<LostPatientsResponse>(`/api/follow-up/ai/lost-patients?inactivity_days=${this.inactivityDays()}`, {}).subscribe({
       next: r  => { this.lostResult.set(r.patients); this.lostLoading.set(false); },
-      error: () => { this.lostError.set('Erreur Gemini.'); this.lostLoading.set(false); },
+      error: (err) => { this.lostError.set(this._geminiError(err)); this.lostLoading.set(false); },
     });
   }
 
@@ -198,7 +202,7 @@ export class AiFeatures implements OnChanges {
     this.weeklyLoading.set(true); this.weeklyResult.set(null); this.weeklyError.set(null);
     this.http.post<WeeklyReport>('/api/follow-up/ai/weekly-report', this.weeklyForm.getRawValue()).subscribe({
       next: r  => { this.weeklyResult.set(r); this.weeklyLoading.set(false); },
-      error: () => { this.weeklyError.set('Erreur Gemini.'); this.weeklyLoading.set(false); },
+      error: (err) => { this.weeklyError.set(this._geminiError(err)); this.weeklyLoading.set(false); },
     });
   }
 
@@ -218,4 +222,10 @@ export class AiFeatures implements OnChanges {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  private _geminiError(err: any): string {
+    if (err?.status === 429) return '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.';
+    if (err?.status === 504) return '⏱️ Gemini n\'a pas répondu à temps — réessayez.';
+    if (err?.status === 503) return '🔧 Service Gemini indisponible — réessayez plus tard.';
+    return err?.error?.detail ?? 'Erreur lors de la génération Gemini.';
+  }
 }
