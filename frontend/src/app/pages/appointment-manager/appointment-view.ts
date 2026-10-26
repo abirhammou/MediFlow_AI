@@ -12,7 +12,7 @@ import {
 import { DirectoryService, DoctorOption, PatientOption } from './directory.service';
 import { VoiceButton } from './voice-button';
 import { PatientPicker } from './patient-picker';
-import { StatsData } from './appointment-stats';
+import { AppointmentStats, StatsData } from './appointment-stats';
 const CLINIC_TZ = 'Africa/Tunis';
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -32,7 +32,7 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
  */
 @Component({
   selector: 'app-appointment-view',
-  imports: [Icon, FormsModule, DatePipe, AppointmentsApi, PatientPicker, VoiceButton],
+    imports: [Icon, FormsModule, DatePipe, AppointmentStats, PatientPicker, VoiceButton],
   styleUrl: './appointment-manager.scss',
   template: `
     <div class="module-page">
