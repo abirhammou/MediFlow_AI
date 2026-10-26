@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, input, OnChanges, SimpleChanges } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../../shared/icon/icon';
@@ -23,15 +23,22 @@ type FeatureKey = 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'wee
   templateUrl: './ai-features.html',
   styleUrl:    './ai-features.scss',
 })
-export class AiFeatures {
+export class AiFeatures implements OnChanges {
   private http = inject(HttpClient);
   private fb   = inject(FormBuilder);
+
+  // Input depuis le parent — synchronise l'onglet actif
+  activeFeature = input<string>('summary');
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['activeFeature']) {
+      this.loadPatients();
+    }
+  }
 
   // ── Patients ──────────────────────────────────────────────────────────────
   allPatients     = signal<PatientOption[]>([]);
   patientsLoading = signal(false);
-
-  ngOnInit() { this.loadPatients(); }
 
   loadPatients() {
     this.patientsLoading.set(true);
@@ -41,17 +48,8 @@ export class AiFeatures {
     });
   }
 
-  // ── Active tab ────────────────────────────────────────────────────────────
-  activeFeature = signal<FeatureKey>('summary');
-
-  features: { key: FeatureKey; icon: string; label: string; desc: string; color: string }[] = [
-    { key: 'summary',  icon: 'file-text', label: '🧠 Résumé patient',        desc: 'Historique de suivi en 2-3 phrases',                  color: '#3b82f6' },
-    { key: 'noshow',   icon: 'eye',       label: '🔮 Prédiction no-show',     desc: 'Probabilité de non-présentation',                     color: '#ef4444' },
-    { key: 'schedule', icon: 'calendar',  label: '📅 Planification auto',     desc: 'Calendrier optimisé des rappels',                     color: '#8b5cf6' },
-    { key: 'adaptive', icon: 'chat',      label: '💬 Ton adaptatif',          desc: 'Rappel au ton personnalisé selon le profil',          color: '#f59e0b' },
-    { key: 'lost',     icon: 'bell',      label: '🔁 Patients perdus de vue', desc: 'Reprise de contact après inactivité',                 color: '#10b981' },
-    { key: 'weekly',   icon: 'bar-chart', label: '📊 Rapport hebdomadaire',   desc: 'Résumé narratif + recommandations de la semaine',     color: '#6366f1' },
-  ];
+  // ── Active tab — piloté par le parent ────────────────────────────────────
+  // (activeFeature est maintenant un @input())
 
   // ── 1. Résumé patient ─────────────────────────────────────────────────────
   summaryLoading = signal(false);
@@ -74,7 +72,11 @@ export class AiFeatures {
       patient_id: this.summaryForm.value.patient_id, patient_name: this._summaryPatientName,
     }).subscribe({
       next: r  => { this.summaryResult.set(r); this.summaryLoading.set(false); },
-      error: () => { this.summaryError.set('Erreur Gemini.'); this.summaryLoading.set(false); },
+      error: (err) => {
+        const msg = err?.error?.detail ?? 'Erreur Gemini.';
+        this.summaryError.set(err?.status === 429 ? '⏳ Quota Gemini dépassé — réessayez dans 1 minute.' : msg);
+        this.summaryLoading.set(false);
+      },
     });
   }
 
@@ -105,7 +107,7 @@ export class AiFeatures {
       next_appointment: v.next_appointment, next_reason: v.next_reason,
     }).subscribe({
       next: r  => { this.noshowResult.set(r); this.noshowLoading.set(false); },
-      error: () => { this.noshowError.set('Erreur Gemini.'); this.noshowLoading.set(false); },
+      error: (err) => { this.noshowError.set(this._geminiError(err)); this.noshowLoading.set(false); },
     });
   }
 
@@ -128,7 +130,7 @@ export class AiFeatures {
     this.scheduleLoading.set(true); this.scheduleResult.set([]); this.scheduleError.set(null);
     this.http.post<ScheduleResponse>('/api/follow-up/ai/schedule', this.scheduleForm.getRawValue()).subscribe({
       next: r  => { this.scheduleResult.set(r.calls); this.scheduleLoading.set(false); },
-      error: () => { this.scheduleError.set('Erreur Gemini.'); this.scheduleLoading.set(false); },
+      error: (err) => { this.scheduleError.set(this._geminiError(err)); this.scheduleLoading.set(false); },
     });
   }
 
@@ -163,7 +165,7 @@ export class AiFeatures {
       appointment_date: v.appointment_date, appointment_reason: v.appointment_reason,
     }).subscribe({
       next: r  => { this.adaptiveResult.set(r); this.adaptiveLoading.set(false); },
-      error: () => { this.adaptiveError.set('Erreur Gemini.'); this.adaptiveLoading.set(false); },
+      error: (err) => { this.adaptiveError.set(this._geminiError(err)); this.adaptiveLoading.set(false); },
     });
   }
 
@@ -181,7 +183,7 @@ export class AiFeatures {
     this.lostLoading.set(true); this.lostResult.set([]); this.lostError.set(null);
     this.http.post<LostPatientsResponse>(`/api/follow-up/ai/lost-patients?inactivity_days=${this.inactivityDays()}`, {}).subscribe({
       next: r  => { this.lostResult.set(r.patients); this.lostLoading.set(false); },
-      error: () => { this.lostError.set('Erreur Gemini.'); this.lostLoading.set(false); },
+      error: (err) => { this.lostError.set(this._geminiError(err)); this.lostLoading.set(false); },
     });
   }
 
@@ -200,7 +202,7 @@ export class AiFeatures {
     this.weeklyLoading.set(true); this.weeklyResult.set(null); this.weeklyError.set(null);
     this.http.post<WeeklyReport>('/api/follow-up/ai/weekly-report', this.weeklyForm.getRawValue()).subscribe({
       next: r  => { this.weeklyResult.set(r); this.weeklyLoading.set(false); },
-      error: () => { this.weeklyError.set('Erreur Gemini.'); this.weeklyLoading.set(false); },
+      error: (err) => { this.weeklyError.set(this._geminiError(err)); this.weeklyLoading.set(false); },
     });
   }
 
@@ -220,12 +222,10 @@ export class AiFeatures {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  isLoading(f: FeatureKey) {
-    const map: Record<FeatureKey, boolean> = {
-      summary: this.summaryLoading(), noshow: this.noshowLoading(),
-      schedule: this.scheduleLoading(), adaptive: this.adaptiveLoading(),
-      lost: this.lostLoading(), weekly: this.weeklyLoading(),
-    };
-    return map[f];
+  private _geminiError(err: any): string {
+    if (err?.status === 429) return '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.';
+    if (err?.status === 504) return '⏱️ Gemini n\'a pas répondu à temps — réessayez.';
+    if (err?.status === 503) return '🔧 Service Gemini indisponible — réessayez plus tard.';
+    return err?.error?.detail ?? 'Erreur lors de la génération Gemini.';
   }
 }

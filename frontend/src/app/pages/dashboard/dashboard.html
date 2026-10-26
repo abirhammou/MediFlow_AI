@@ -1,52 +1,331 @@
-<div class="page">
+﻿<div class="dash">
 
-  @if (error()) {
-    <div class="alert" role="alert">{{ error() }}</div>
-  } @else if (summary(); as data) {
-    <section class="intro">
-      <h1>Bonjour, {{ data.full_name }} 👋</h1>
-      <p>Espace {{ roleLabel(data.role).toLowerCase() }} · voici votre résumé du jour.</p>
-    </section>
+  <!-- HEADER -->
+  <div class="dash-header">
+    <div class="dh-left">
+      <span class="dh-emoji">{{ timeOfDay() }}</span>
+      <div>
+        @if (summary(); as s) {
+          <h1 class="dh-name">{{ greeting() }}, {{ s.full_name }}</h1>
+          <div class="dh-meta">
+            <span class="dh-badge">{{ roleLabel(s.role) }}</span>
+            <span class="dh-sep">·</span>
+            <span class="dh-date">{{ now() | date:'EEEE d MMMM yyyy' }}</span>
+          </div>
+        } @else if (!loading()) {
+          <h1 class="dh-name">{{ greeting() }}</h1>
+        }
+      </div>
+    </div>
+    <div class="dh-right">
+      <div class="dh-clock">
+        <div class="clock-time">{{ now() | date:'HH:mm:ss' }}</div>
+        <div class="clock-online"><span class="online-dot"></span> En ligne</div>
+      </div>
+    </div>
+  </div>
 
-    <section class="kpis" aria-label="Indicateurs">
-      @for (kpi of data.kpis; track kpi.key) {
-        <article class="kpi">
-          <h2>{{ kpi.label }}</h2>
-          @if (isBreakdown(kpi.value)) {
-            <ul class="breakdown">
-              @for (item of breakdown(kpi.value); track item.label) {
-                <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
-              }
-            </ul>
-          } @else {
-            <p class="value">{{ kpi.value }}</p>
-          }
-        </article>
+  @if (error()) { <div class="alert">{{ error() }}</div> }
+
+  <!-- SKELETON -->
+  @if (loading()) {
+    <div class="kpi-row">
+      @for (_ of [1,2,3,4,5,6]; track $index) {
+        <div class="kpi-card kpi-skeleton"></div>
       }
-    </section>
+    </div>
+  }
 
-    @if (data.alerts.length) {
-      <section class="alerts" aria-label="À suivre">
-        <h2>À suivre</h2>
-        <ul>
-          @for (alert of data.alerts; track $index) {
-            <li class="item">
-              <span class="item-icon"><app-icon [name]="alert.start_at ? 'calendar' : 'activity'" [size]="18" /></span>
-              @if (alert.start_at) {
-                <div>
-                  <strong>{{ formatDate(alert.start_at) }}</strong>
-                  <p>{{ alert.reason || 'Rendez-vous' }} · {{ statusLabel(alert.status) }}</p>
-                </div>
-              } @else {
-                <p>{{ alert.message }}</p>
-              }
-            </li>
+  @if (summary(); as data) {
+
+    <!-- KPIs -->
+    <div class="kpi-row">
+      @for (kpi of simpleKpis(data.kpis); track kpi.key) {
+        <a class="kpi-card" [routerLink]="kpiMeta(kpi.key).route ?? null"
+           [class.clickable]="!!kpiMeta(kpi.key).route"
+           [style.--kc]="kpiMeta(kpi.key).color"
+           [style.--kb]="kpiMeta(kpi.key).bg">
+          <div class="kpi-ico"><app-icon [name]="kpiMeta(kpi.key).icon" [size]="20" /></div>
+          <div class="kpi-body">
+            <span class="kpi-lbl">{{ kpi.label }}</span>
+            <span class="kpi-val">{{ kpi.value }}</span>
+          </div>
+          @if (kpiMeta(kpi.key).route) {
+            <app-icon name="arrow-left" [size]="12" class="kpi-arr" />
           }
-        </ul>
-      </section>
-    }
-  } @else {
-    <p class="loading">Chargement du tableau de bord…</p>
+        </a>
+      }
+    </div>
+
+    <!-- ROW 2 : Notes de suivi | Batiment | Medecins -->
+    <div class="building-row">
+
+      <!-- Bloc gauche : Notes de suivi -->
+      <div class="side-bloc">
+        <div class="side-hd">
+          <!-- Symbole bloc-notes médical -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+          Notes de suivi
+        </div>
+
+        <!-- Banderole symboles médicaux -->
+        <div class="med-symbols">
+          <!-- Stéthoscope -->
+          <span class="med-sym" title="Consultation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8">
+              <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/>
+              <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/>
+              <circle cx="20" cy="10" r="2"/>
+            </svg>
+          </span>
+          <!-- Pilule -->
+          <span class="med-sym" title="Traitement">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8">
+              <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/>
+            </svg>
+          </span>
+          <!-- Coeur -->
+          <span class="med-sym" title="Cardiologie">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#fecaca" stroke="#ef4444" stroke-width="1.8">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </span>
+          <!-- Seringue -->
+          <span class="med-sym" title="Vaccin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.8">
+              <line x1="2" y1="22" x2="22" y2="2"/><path d="m17 2 5 5-1.5 1.5-5-5 1.5-1.5z"/><path d="m11 3 5 5-7 7-5-5 7-7z"/><path d="m6 13 1.5 1.5"/><path d="m8 11 1.5 1.5"/><path d="m10 9 1.5 1.5"/><path d="M3 21 9 15"/>
+            </svg>
+          </span>
+          <!-- Croix médicale -->
+          <span class="med-sym" title="Urgences">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+          </span>
+        </div>
+
+        <div class="side-body">
+          @if (followupNotes().length === 0) {
+            <p class="side-empty">Aucune tache en attente</p>
+          }
+          @for (note of followupNotes(); track note.id) {
+            <div class="note-item">
+              <span class="note-dot note-pending"></span>
+              <div class="note-content">
+                <span class="note-patient">{{ note.patient_name || 'Patient' }}</span>
+                <span class="note-desc">{{ note.description }}</span>
+                <span class="note-date"><app-icon name="bell" [size]="10" /> {{ note.due_date }}</span>
+              </div>
+            </div>
+          }
+        </div>
+        <a class="side-link" routerLink="/follow-up">Voir toutes les taches →</a>
+      </div>
+
+      <!-- Batiment SVG -->
+      <div class="building-center">
+        <div class="building-hd">
+          <app-icon name="home" [size]="15" /> MediFlow AI — Clinique
+        </div>
+        <div class="building-full">
+          <svg viewBox="0 0 600 280" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="sky4" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#bfdbfe"/>
+                <stop offset="60%" stop-color="#dbeafe"/>
+                <stop offset="100%" stop-color="#eff6ff"/>
+              </linearGradient>
+              <linearGradient id="bd4" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1e3a8a"/>
+                <stop offset="100%" stop-color="#1459d9"/>
+              </linearGradient>
+              <linearGradient id="win4" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#fef3c7"/>
+                <stop offset="100%" stop-color="#fde68a"/>
+              </linearGradient>
+            </defs>
+            <rect width="600" height="280" fill="url(#sky4)"/>
+            <rect x="0" y="248" width="600" height="32" fill="#15803d" rx="2"/>
+            <rect x="220" y="250" width="160" height="30" fill="#475569"/>
+            <line x1="300" y1="250" x2="300" y2="280" stroke="white" stroke-width="3" stroke-dasharray="10,6"/>
+            <!-- Aile gauche -->
+            <rect x="60" y="110" width="130" height="142" fill="url(#bd4)" rx="3"/>
+            <rect x="60" y="110" width="130" height="10" fill="#1e40af"/>
+            <!-- Corps central -->
+            <rect x="185" y="60" width="230" height="192" fill="url(#bd4)" rx="3"/>
+            <rect x="185" y="60" width="230" height="13" fill="#1d4ed8"/>
+            <!-- Aile droite -->
+            <rect x="410" y="110" width="130" height="142" fill="url(#bd4)" rx="3"/>
+            <rect x="410" y="110" width="130" height="10" fill="#1e40af"/>
+            <!-- Fenetres aile gauche -->
+            <rect class="win win1" x="72" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="102" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="132" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="162" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="72" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="102" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="132" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="162" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="72" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="102" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="132" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="162" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <!-- Fenetres corps central R1 -->
+            <rect class="win win1" x="197" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="233" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="269" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="305" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="341" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="377" y="83" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <!-- R2 -->
+            <rect class="win win3" x="197" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="233" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="269" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="305" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="341" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="377" y="114" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <!-- R3 -->
+            <rect class="win win2" x="197" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="233" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="269" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="305" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="341" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="377" y="145" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <!-- R4 -->
+            <rect class="win win1" x="197" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="233" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="269" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="305" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="341" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="377" y="176" width="26" height="18" rx="2" fill="url(#win4)"/>
+            <!-- Fenetres aile droite -->
+            <rect class="win win4" x="422" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="452" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="482" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="512" y="130" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="422" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="452" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="482" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="512" y="158" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win1" x="422" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win3" x="452" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win2" x="482" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <rect class="win win4" x="512" y="186" width="22" height="16" rx="2" fill="url(#win4)"/>
+            <!-- Entree -->
+            <rect x="264" y="206" width="72" height="46" fill="#1e3a8a" rx="3"/>
+            <line x1="300" y1="206" x2="300" y2="252" stroke="#93c5fd" stroke-width="1.5"/>
+            <rect x="268" y="206" width="30" height="4" fill="#3b82f6" rx="1"/>
+            <rect x="302" y="206" width="30" height="4" fill="#3b82f6" rx="1"/>
+            <!-- Enseigne -->
+            <rect x="210" y="65" width="180" height="16" fill="#1459d9" rx="2"/>
+            <text x="300" y="77" text-anchor="middle" fill="white" font-size="10" font-weight="bold" letter-spacing="1">MEDIFLOW AI</text>
+            <!-- Croix animee -->
+            <g class="cross-anim" style="transform-origin:300px 40px">
+              <rect x="296" y="25" width="8" height="28" fill="#ef4444" rx="2"/>
+              <rect x="286" y="35" width="28" height="8" fill="#ef4444" rx="2"/>
+            </g>
+            <!-- Nuages -->
+            <g class="cloud cloud1">
+              <ellipse cx="55" cy="30" rx="30" ry="14" fill="white" opacity=".9"/>
+              <ellipse cx="78" cy="22" rx="22" ry="13" fill="white" opacity=".9"/>
+              <ellipse cx="35" cy="28" rx="18" ry="11" fill="white" opacity=".9"/>
+            </g>
+            <g class="cloud cloud2">
+              <ellipse cx="500" cy="25" rx="28" ry="13" fill="white" opacity=".8"/>
+              <ellipse cx="523" cy="18" rx="20" ry="12" fill="white" opacity=".8"/>
+            </g>
+            <!-- Arbres -->
+            <rect x="20" y="220" width="9" height="30" fill="#92400e"/>
+            <ellipse cx="24" cy="210" rx="22" ry="24" fill="#14532d"/>
+            <rect x="48" y="228" width="7" height="22" fill="#92400e"/>
+            <ellipse cx="51" cy="220" rx="16" ry="18" fill="#166534"/>
+            <rect x="541" y="228" width="7" height="22" fill="#92400e"/>
+            <ellipse cx="544" cy="220" rx="16" ry="18" fill="#166534"/>
+            <rect x="565" y="220" width="9" height="30" fill="#92400e"/>
+            <ellipse cx="569" cy="210" rx="20" ry="22" fill="#14532d"/>
+            <!-- Lampadaires -->
+            <rect x="175" y="215" width="4" height="36" fill="#64748b"/>
+            <rect x="170" y="215" width="14" height="4" fill="#64748b" rx="2"/>
+            <ellipse cx="177" cy="213" rx="5" ry="3" fill="#fef08a" opacity=".9"/>
+            <rect x="421" y="215" width="4" height="36" fill="#64748b"/>
+            <rect x="416" y="215" width="14" height="4" fill="#64748b" rx="2"/>
+            <ellipse cx="423" cy="213" rx="5" ry="3" fill="#fef08a" opacity=".9"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Bloc droit : Medecins -->
+      <div class="side-bloc">
+        <div class="side-hd">
+          <!-- Symbole médecin -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          Medecins disponibles
+        </div>
+
+        <!-- Banderole symboles médicaux médecins -->
+        <div class="med-symbols">
+          <!-- Blouse -->
+          <span class="med-sym" title="Medecin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1459d9" stroke-width="1.8">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+          </span>
+          <!-- Stéthoscope -->
+          <span class="med-sym" title="Auscultation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8">
+              <circle cx="11" cy="5" r="1"/><circle cx="14" cy="5" r="1"/>
+              <path d="M7 12a5 5 0 0 0 5 5v0a5 5 0 0 0 5-5V7"/><circle cx="18" cy="9" r="2"/>
+            </svg>
+          </span>
+          <!-- Clipboard médical -->
+          <span class="med-sym" title="Dossier patient">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+              <rect x="8" y="2" width="8" height="4" rx="1"/>
+              <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+            </svg>
+          </span>
+          <!-- Microscope -->
+          <span class="med-sym" title="Laboratoire">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.8">
+              <path d="M6 18L4 20h16l-2-2"/><path d="M12 2v10"/><path d="m9 5 3-3 3 3"/><path d="M9 12H5l-2 3h18l-2-3h-4"/>
+            </svg>
+          </span>
+          <!-- Calendrier médical -->
+          <span class="med-sym" title="Planning">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              <line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/>
+            </svg>
+          </span>
+        </div>
+
+        <div class="side-body">
+          @if (doctors().length === 0) {
+            <p class="side-empty">Aucun medecin enregistre</p>
+          }
+          @for (doc of doctors(); track doc.id) {
+            <div class="doctor-item">
+              <div class="doc-avatar">{{ doc.initials }}</div>
+              <div class="doc-info">
+                <span class="doc-name">{{ doc.name }}</span>
+                <span class="doc-spec">{{ doc.specialty }}</span>
+              </div>
+              <span class="doc-status" [class]="doc.available ? 'available' : 'busy'">
+                {{ doc.available ? 'Disponible' : 'Occupe' }}
+              </span>
+            </div>
+          }
+        </div>
+        <a class="side-link" routerLink="/appointment-manager">Prendre un RDV →</a>
+      </div>
+
+    </div>
+
   }
 
 </div>

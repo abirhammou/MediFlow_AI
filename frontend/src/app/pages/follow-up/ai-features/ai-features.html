@@ -1,27 +1,5 @@
 <div class="ai-page">
 
-  <!-- ── Header ── -->
-  <div class="ai-header">
-    <div class="ai-icon"><app-icon name="zap" [size]="22" /></div>
-    <div>
-      <h2>IA Avancée — FollowUp AI</h2>
-      <p>6 fonctionnalités Gemini pour optimiser le suivi administratif des patients</p>
-    </div>
-  </div>
-
-  <!-- ── Feature tabs ── -->
-  <div class="feature-tabs">
-    @for (f of features; track f.key) {
-      <button class="feature-tab" [class.active]="activeFeature() === f.key"
-              (click)="activeFeature.set(f.key)"
-              [style.--fc]="f.color">
-        <span class="ft-label">{{ f.label }}</span>
-        <span class="ft-desc">{{ f.desc }}</span>
-        @if (isLoading(f.key)) { <span class="ft-spinner"></span> }
-      </button>
-    }
-  </div>
-
   <!-- ═══════════════════════════════════════════════════════════════════
        1. RÉSUMÉ PATIENT
   ════════════════════════════════════════════════════════════════════════ -->

@@ -44,11 +44,10 @@ async def test_llm_status_never_exposes_key(client):
 
 
 @pytest.mark.asyncio
-async def test_documents_module_returns_typed_501(client):
+async def test_documents_module_requires_authentication(client):
     response = await client.get("/api/documents/")
 
-    assert response.status_code == 501
-    assert response.json()["code"] == "not_implemented"
+    assert response.status_code == 401
 
 
 def test_openapi_contains_only_discovered_module_routes():
@@ -58,8 +57,14 @@ def test_openapi_contains_only_discovered_module_routes():
     assert "/api/notes/" in paths
     assert "/api/llm/status" in paths
     assert set(paths) == {
-        "/api/health",
+        "/health",
+        "/api/documents",
         "/api/documents/",
+        "/api/documents/patient-options",
+        "/api/documents/patients/{patient_id}/history",
+        "/api/documents/{document_id}",
+        "/api/documents/{document_id}/extract",
+        "/api/documents/{document_id}/review",
         "/api/notes/",
         "/api/notes/summarize",
         "/api/notes/{note_id}",
@@ -77,6 +82,11 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/users/{user_id}/link-patient",
         "/api/users/{user_id}/unlink-patient",
         "/api/dashboard/summary",
+        "/api/reports",
+        "/api/reports/{report_id}",
+        "/api/reports/{report_id}/archive",
+        "/api/reports/{report_id}/finalize",
+        "/api/reports/{report_id}/generate",
         "/api/patients",
         "/api/patients/duplicates",
         "/api/patients/deleted",
@@ -89,6 +99,7 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/patients/{patient_id}/summaries/{summary_id}/validate",
         "/api/patients/{patient_id}/summaries/{summary_id}/reject",
         "/api/follow-up/tasks",
+        "/api/follow-up/tasks/stats",
         "/api/follow-up/tasks/{task_id}",
         "/api/follow-up/reminders/generate",
         "/api/appointments",
