@@ -19,11 +19,33 @@ interface ReminderDraft {
   body: string;
 }
 
+interface PatientOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  recordNumber: string;
+}
+
+interface PrioritizedTask {
+  task_id: string;
+  patient_name: string;
+  appointment_date: string;
+  appointment_reason: string;
+  due_date: string;
+  status: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  justification: string;
+}
+
+interface PriorityResponse {
+  tasks: PrioritizedTask[];
+}
+
 const STEPS = [
-  { key: 'draft',    label: '1. Brouillon',  icon: 'zap'      },
-  { key: 'reviewed', label: '2. Vérifié',    icon: 'eye'      },
-  { key: 'approved', label: '3. Approuvé',   icon: 'shield'   },
-  { key: 'exported', label: '4. Exporté',    icon: 'file'     },
+  { key: 'draft',    label: '1. Brouillon',  icon: 'zap'    },
+  { key: 'reviewed', label: '2. Vérifié',    icon: 'eye'    },
+  { key: 'approved', label: '3. Approuvé',   icon: 'shield' },
+  { key: 'exported', label: '4. Exporté',    icon: 'file'   },
 ] as const;
 
 @Component({
@@ -39,27 +61,85 @@ export class Reminders {
   readonly steps = STEPS;
 
   // ── State ─────────────────────────────────────────────────────────────────
-  reminders      = signal<SavedReminder[]>([]);
-  loading        = signal(true);
-  apiError       = signal<string | null>(null);
-  generating     = signal(false);
-  genError       = signal<string | null>(null);
-  draft          = signal<ReminderDraft | null>(null);
-  saving         = signal(false);
-  selected       = signal<SavedReminder | null>(null);
-  showDetail     = signal(false);
-  exportingId    = signal<string | null>(null);
+  reminders   = signal<SavedReminder[]>([]);
+  loading     = signal(true);
+  apiError    = signal<string | null>(null);
+  generating  = signal(false);
+  genError    = signal<string | null>(null);
+  draft       = signal<ReminderDraft | null>(null);
+  saving      = signal(false);
+  selected    = signal<SavedReminder | null>(null);
+  showDetail  = signal(false);
+  exportingId = signal<string | null>(null);
 
-  // ── Form génération ────────────────────────────────────────────────────────
+  // ── Patients list ─────────────────────────────────────────────────────────
+  allPatients     = signal<PatientOption[]>([]);
+  patientsLoading = signal(false);
+
+  // ── Form génération ───────────────────────────────────────────────────────
   genForm = this.fb.nonNullable.group({
     patient_name:       ['', [Validators.required, Validators.maxLength(200)]],
     appointment_date:   ['', Validators.required],
     appointment_reason: ['', [Validators.required, Validators.maxLength(500)]],
   });
 
-  constructor() { this.loadReminders(); }
+  constructor() {
+    this.loadReminders();
+    this.loadPatients();
+  }
 
-  // ── Chargement ────────────────────────────────────────────────────────────
+  // ── Priorité IA ───────────────────────────────────────────────────────────
+  prioritizing    = signal(false);
+  priorityResult  = signal<PrioritizedTask[]>([]);
+  priorityError   = signal<string | null>(null);
+  showPriority    = signal(false);
+
+  prioritizeTasks() {
+    this.prioritizing.set(true);
+    this.priorityError.set(null);
+    this.http.post<PriorityResponse>('/api/follow-up/tasks/prioritize', {}).subscribe({
+      next: res => {
+        this.priorityResult.set(res.tasks);
+        this.showPriority.set(true);
+        this.prioritizing.set(false);
+      },
+      error: (err: any) => {
+        const msg = err?.status === 429
+          ? '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.'
+          : (err?.error?.detail ?? 'Erreur lors de l\'analyse de priorité.');
+        this.priorityError.set(msg);
+        this.prioritizing.set(false);
+      },
+    });
+  }
+
+  priorityColor(p: PrioritizedTask['priority']): string {
+    return { HIGH: '#dc2626', MEDIUM: '#d97706', LOW: '#16a34a' }[p] ?? '#64748b';
+  }
+
+  priorityBg(p: PrioritizedTask['priority']): string {
+    return { HIGH: '#fee2e2', MEDIUM: '#fef9c3', LOW: '#dcfce7' }[p] ?? '#f1f5f9';
+  }
+
+  priorityLabel(p: PrioritizedTask['priority']): string {
+    return { HIGH: 'Urgent', MEDIUM: 'Modéré', LOW: 'Faible' }[p] ?? p;
+  }
+  loadPatients() {
+    this.patientsLoading.set(true);
+    this.http.get<{ items: PatientOption[] }>('/api/patients?size=100&page=1').subscribe({
+      next: res => { this.allPatients.set(res.items); this.patientsLoading.set(false); },
+      error: ()  => this.patientsLoading.set(false),
+    });
+  }
+
+  onPatientChange(id: string) {
+    const p = this.allPatients().find(x => x.id === id);
+    if (p) {
+      this.genForm.patchValue({ patient_name: `${p.firstName} ${p.lastName}` });
+    }
+  }
+
+  // ── Chargement rappels ────────────────────────────────────────────────────
   loadReminders() {
     this.loading.set(true);
     this.http.get<SavedReminder[]>('/api/follow-up/reminders').subscribe({
@@ -76,7 +156,13 @@ export class Reminders {
     this.genError.set(null);
     this.http.post<ReminderDraft>('/api/follow-up/reminders/generate', this.genForm.getRawValue()).subscribe({
       next: d  => { this.draft.set(d); this.generating.set(false); },
-      error: () => { this.genError.set('Erreur lors de la génération Gemini.'); this.generating.set(false); },
+      error: (err: any) => {
+        const msg = err?.status === 429
+          ? '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.'
+          : (err?.error?.detail ?? 'Erreur lors de la génération.');
+        this.genError.set(msg);
+        this.generating.set(false);
+      },
     });
   }
 
@@ -117,17 +203,10 @@ export class Reminders {
     });
   }
 
-  canAdvance(step: SavedReminder['step']): boolean {
-    return step !== 'exported';
-  }
+  canAdvance(step: SavedReminder['step']): boolean { return step !== 'exported'; }
 
   nextStepLabel(step: SavedReminder['step']): string {
-    const map: Record<string, string> = {
-      draft:    'Marquer vérifié',
-      reviewed: 'Approuver',
-      approved: 'Marquer exporté',
-    };
-    return map[step] ?? '';
+    return ({ draft: 'Marquer vérifié', reviewed: 'Approuver', approved: 'Marquer exporté' } as any)[step] ?? '';
   }
 
   // ── Suppression ───────────────────────────────────────────────────────────
@@ -174,15 +253,15 @@ export class Reminders {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   stepIndex(step: SavedReminder['step']): number {
-    return ['draft','reviewed','approved','exported'].indexOf(step);
+    return ['draft', 'reviewed', 'approved', 'exported'].indexOf(step);
   }
 
   stepColor(step: SavedReminder['step']): string {
-    return { draft:'#f59e0b', reviewed:'#3b82f6', approved:'#22c55e', exported:'#8b5cf6' }[step] ?? '#94a3b8';
+    return ({ draft: '#f59e0b', reviewed: '#3b82f6', approved: '#22c55e', exported: '#8b5cf6' } as any)[step] ?? '#94a3b8';
   }
 
   stepLabel(step: SavedReminder['step']): string {
-    return { draft:'Brouillon', reviewed:'Vérifié', approved:'Approuvé', exported:'Exporté' }[step] ?? step;
+    return ({ draft: 'Brouillon', reviewed: 'Vérifié', approved: 'Approuvé', exported: 'Exporté' } as any)[step] ?? step;
   }
 
   isInvalid(field: string) {
@@ -191,7 +270,7 @@ export class Reminders {
   }
 
   formatDate(iso: string): string {
-    try { return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' }); }
+    try { return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }); }
     catch { return iso; }
   }
 }

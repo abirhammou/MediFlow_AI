@@ -198,3 +198,95 @@
   &.danger:hover  { color: var(--danger); border-color: #fecaca; background: #fef2f2; }
 }
 .req { color: var(--danger); }
+
+/* ── Patient select ── */
+.select-patient {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .875rem center;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+/* ── Rappels intelligents ── */
+.smart-box {
+  background: var(--surface); border-radius: var(--radius); padding: 1.5rem;
+  box-shadow: var(--shadow-md); border: 1px solid var(--border); margin-bottom: 1.5rem;
+  border-top: 3px solid var(--primary);
+}
+.smart-header {
+  display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
+  h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .2rem; }
+  p  { font-size: .78rem; color: var(--muted); margin: 0; }
+}
+.smart-icon {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--primary-50); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.smart-btn { margin-left: auto; white-space: nowrap; }
+.smart-empty { margin-top: 1rem; font-size: .85rem; color: var(--muted); text-align: center; padding: 1rem; }
+
+/* ── Priority list ── */
+.priority-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: .875rem; margin-top: 1.25rem;
+}
+.priority-card {
+  padding: 1rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); border-left: 4px solid;
+  background: var(--bg); display: flex; flex-direction: column; gap: .5rem;
+  transition: box-shadow .15s;
+  &:hover { box-shadow: var(--shadow-md); background: var(--surface); }
+}
+.priority-top {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+}
+.priority-rank {
+  font-size: .72rem; font-weight: 800; color: var(--muted);
+  background: var(--border); padding: .1rem .4rem; border-radius: 4px;
+}
+.priority-badge {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .2rem .6rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
+}
+.priority-due {
+  margin-left: auto; font-size: .72rem; color: var(--muted);
+  display: flex; align-items: center; gap: .25rem;
+}
+.priority-patient {
+  display: flex; align-items: center; gap: .375rem;
+  font-size: .875rem;
+  strong { color: var(--ink); }
+}
+.priority-reason {
+  font-size: .75rem; color: var(--muted);
+  display: flex; align-items: center; gap: .25rem;
+}
+.priority-justification {
+  font-size: .78rem; color: var(--ink); font-style: italic;
+  display: flex; align-items: flex-start; gap: .3rem;
+  padding-top: .4rem; border-top: 1px dashed var(--border);
+  line-height: 1.5;
+}
+
+/* ── Sub-tabs ── */
+.sub-tabs {
+  display: flex; gap: .375rem; margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border);
+}
+.sub-tab {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .55rem 1rem; font-size: .83rem; font-weight: 600;
+  border: none; background: none; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+  &:hover { color: var(--primary); }
+  &.active { color: var(--primary); border-bottom-color: var(--primary); }
+  &.ai-tab.active {
+    color: #7c3aed; border-bottom-color: #7c3aed;
+    background: linear-gradient(135deg, #ede9fe 0%, #faf5ff 100%);
+    border-radius: 6px 6px 0 0;
+  }
+}

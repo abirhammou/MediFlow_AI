@@ -1,323 +1,289 @@
-"""Appointments: free slots from the doctors' weekly availabilities, booking, confirmation.
-
-A PATIENT books a PENDING appointment for their own record (never another one) that the
-secretary confirms; staff bookings are CONFIRMED at once. No double booking: the slot
-must be free in the doctor's grid, `find_overlapping_appointment` refuses any overlap,
-and the unique index uq_appt_doctor_slot settles two bookings at the same instant.
-"""
-
-from datetime import date, datetime, time, timedelta
-from typing import Any
+from datetime import UTC, date, datetime, timedelta
 
 from beanie import PydanticObjectId
-from beanie.operators import GTE, LT, Eq, In
-from bson.errors import InvalidId
-from pymongo import ReturnDocument
-from pymongo.errors import DuplicateKeyError
+from fastapi import HTTPException
 
+from app.core.pagination import Page
 from app.core.time import utcnow
-from app.errors import APIError
-from app.modules.appointments.models import Appointment, AppointmentStatus
-from app.modules.appointments.repository import find_overlapping_appointment
+from app.dependencies import owns_patient_record
+from app.errors import APIError, LLMResponseError, LLMTimeoutError
+from app.llm.service import generate_json
+from app.modules.appointments import repository
+from app.modules.appointments.models import (
+    Appointment,
+    AppointmentRequest,
+    AppointmentStatus,
+    ParsedRequest,
+)
+from app.modules.appointments.prompts import SYSTEM_PROMPT, intent_prompt
 from app.modules.appointments.schemas import (
     AppointmentCancel,
     AppointmentCreate,
+    AppointmentIntent,
     AppointmentOut,
-    AppointmentPage,
-    AvailabilityOut,
-    DoctorOut,
+    AppointmentUpdate,
+    ParseRequestIn,
+    ParseRequestOut,
     SlotOut,
 )
+from app.modules.appointments.slots import CLINIC_TZ, clinic_day_bounds, compute_free_slots
 from app.modules.auth.models import Role, User
-from app.modules.patients import repository as patients
-from app.modules.patients.dates import CLINIC_TZ, clinic_today
-from app.modules.patients.models import Patient
 
-# Who may do what (the frontend mirrors it).
-APPOINTMENT_ROLES: dict[str, tuple[Role, ...]] = {
-    "read": (Role.PATIENT, Role.DOCTOR, Role.SECRETARY, Role.ADMIN),
-    "book": (Role.PATIENT, Role.SECRETARY, Role.ADMIN),
-    "manage": (Role.SECRETARY, Role.ADMIN),  # confirm, any patient
-}
-ACTIVE = [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]
-BOOKING_HORIZON_DAYS = 60
-MAX_SLOT_RANGE_DAYS = 31
-MIN_NOTICE = timedelta(hours=1)
-MAX_PENDING_PER_PATIENT = 3
+LLM_ATTEMPTS = 3
+
+DEFAULT_DURATION = timedelta(minutes=30)
+MAX_PROPOSED_SLOTS = 20
 
 
-def _oid(value: str | None, code: str, detail: str, status: int = 404) -> PydanticObjectId:
-    try:
-        return PydanticObjectId(value)
-    except (InvalidId, TypeError):
-        raise APIError(status, code, detail) from None
-
-
-def _not_found() -> APIError:
-    return APIError(404, "appointment_not_found", "Rendez-vous introuvable.")
-
-
-def _minutes(hhmm: str) -> int:
-    hours, minutes = hhmm.split(":")
-    return int(hours) * 60 + int(minutes)
-
-
-def doctor_slots(doctor: User, first: date, last: date) -> list[tuple[datetime, datetime]]:
-    """Every slot of the doctor's weekly grid between two clinic days (inclusive)."""
-    profile = doctor.doctor_profile
-    if profile is None:
-        return []
-    slots = []
-    day = first
-    while day <= last:
-        for availability in profile.availabilities:
-            if availability.day_of_week != day.isoweekday():
-                continue
-            start = _minutes(availability.start_time)
-            end = _minutes(availability.end_time)
-            for minute in range(
-                start, end - availability.slot_minutes + 1, availability.slot_minutes
-            ):
-                start_at = datetime.combine(day, time(minute // 60, minute % 60), CLINIC_TZ)
-                slots.append((start_at, start_at + timedelta(minutes=availability.slot_minutes)))
-        day += timedelta(days=1)
-    return sorted(slots)
-
-
-async def _doctor(doctor_id: str) -> User:
-    oid = _oid(doctor_id, "doctor_not_found", "Médecin introuvable.")
-    doctor = await User.get(oid)
-    if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
-        raise APIError(404, "doctor_not_found", "Médecin introuvable.")
-    return doctor
-
-
-async def _free_slots(doctor: User, first: date, last: date) -> list[tuple[datetime, datetime]]:
-    grid = doctor_slots(doctor, first, last)
-    if not grid:
-        return []
-    taken = await Appointment.find(
-        Eq(Appointment.doctor_id, doctor.id),
-        In(Appointment.status, ACTIVE),
-        LT(Appointment.start_at, grid[-1][1]),
-        GTE(Appointment.end_at, grid[0][0]),
-    ).to_list()
-    earliest = utcnow() + MIN_NOTICE
-    return [
-        (start, end)
-        for start, end in grid
-        if start >= earliest and not any(a.start_at < end and a.end_at > start for a in taken)
-    ]
+def _serialize(appointment: Appointment) -> AppointmentOut:
+    return AppointmentOut(
+        id=str(appointment.id),
+        patient_id=str(appointment.patient_id),
+        doctor_id=str(appointment.doctor_id),
+        start_at=appointment.start_at,
+        end_at=appointment.end_at,
+        reason=appointment.reason,
+        status=appointment.status,
+        cancel_reason=appointment.cancel_reason,
+    )
 
 
 class AppointmentService:
-    async def doctors(self) -> list[DoctorOut]:
-        doctors = await User.find(Eq(User.role, Role.DOCTOR), Eq(User.is_active, True)).to_list()
-        return [
-            DoctorOut(
-                id=str(d.id),
-                name=f"{d.first_name} {d.last_name}",
-                specialty=d.doctor_profile.specialty if d.doctor_profile else None,
-                office_room=d.doctor_profile.office_room if d.doctor_profile else None,
-                availabilities=[
-                    AvailabilityOut(**a.model_dump())
-                    for a in (d.doctor_profile.availabilities if d.doctor_profile else [])
-                ],
+    """Logique métier des rendez-vous. `repo` est remplaçable dans les tests."""
+
+    def __init__(self, repo=repository) -> None:
+        self.repo = repo
+
+    # ── CRUD ──────────────────────────────────────────────────────────────────
+
+    async def create(self, data: AppointmentCreate, user: User) -> AppointmentOut:
+        if user.role == Role.PATIENT:
+            owns_patient_record(user, str(data.patient_id))
+        if await self.repo.get_patient(data.patient_id) is None:
+            raise APIError(404, "patient_not_found", "Patient introuvable.")
+        if await self.repo.get_doctor(data.doctor_id) is None:
+            raise APIError(404, "doctor_not_found", "Médecin introuvable.")
+
+        end_at = data.end_at or data.start_at + DEFAULT_DURATION
+        if end_at <= data.start_at:
+            raise APIError(422, "invalid_time_range", "La fin doit être après le début.")
+        if data.start_at <= utcnow():
+            raise APIError(422, "appointment_in_past", "Le rendez-vous doit être dans le futur.")
+        await self._ensure_slot_is_free(data.doctor_id, data.start_at, end_at)
+
+        appointment = await self.repo.insert_appointment(
+            Appointment(
+                patient_id=data.patient_id,
+                doctor_id=data.doctor_id,
+                start_at=data.start_at,
+                end_at=end_at,
+                reason=data.reason,
+                # Une demande de patient doit être confirmée par le secrétariat.
+                status=(
+                    AppointmentStatus.PENDING
+                    if user.role == Role.PATIENT
+                    else AppointmentStatus.CONFIRMED
+                ),
+                created_by=user.id,
             )
-            for d in sorted(doctors, key=lambda d: (d.last_name, d.first_name))
-        ]
+        )
+        if data.request_id is not None:
+            request = await self.repo.get_request(data.request_id)
+            if request is not None:
+                request.appointment_id = appointment.id
+                await self.repo.save_request(request)
+        return _serialize(appointment)
 
-    async def slots(self, doctor_id: str, first: date | None, last: date | None) -> list[SlotOut]:
-        doctor = await _doctor(doctor_id)
-        today = clinic_today()
-        first = max(first or today, today)
-        last = min(last or first + timedelta(days=13), today + timedelta(days=BOOKING_HORIZON_DAYS))
-        if last < first:
-            return []
-        if (last - first).days >= MAX_SLOT_RANGE_DAYS:
-            raise APIError(422, "invalid_period", f"Période limitée à {MAX_SLOT_RANGE_DAYS} jours.")
-        return [SlotOut(start_at=s, end_at=e) for s, e in await _free_slots(doctor, first, last)]
-
-    async def _out(
-        self, appointments: list[Appointment], *, with_patient: bool
-    ) -> list[AppointmentOut]:
-        doctor_ids = {a.doctor_id for a in appointments}
-        doctors = {d.id: d for d in await User.find(In(User.id, list(doctor_ids))).to_list()}
-        people: dict[PydanticObjectId, Patient] = {}
-        if with_patient:
-            found = await Patient.find(
-                In(Patient.id, list({a.patient_id for a in appointments}))
-            ).to_list()
-            people = {p.id: p for p in found if p.id}
-        result = []
-        for a in appointments:
-            doctor = doctors.get(a.doctor_id)
-            patient = people.get(a.patient_id)
-            result.append(
-                AppointmentOut(
-                    id=str(a.id),
-                    patient_id=str(a.patient_id),
-                    patient_name=f"{patient.first_name} {patient.last_name}" if patient else None,
-                    record_number=patient.record_number if patient else None,
-                    doctor_id=str(a.doctor_id),
-                    doctor_name=f"{doctor.first_name} {doctor.last_name}" if doctor else None,
-                    specialty=doctor.doctor_profile.specialty
-                    if doctor and doctor.doctor_profile
-                    else None,
-                    start_at=a.start_at,
-                    end_at=a.end_at,
-                    reason=a.reason,
-                    status=a.status,
-                    cancel_reason=a.cancel_reason,
-                    created_at=a.created_at,
-                )
-            )
-        return result
-
-    async def search(
+    async def list_appointments(
         self,
         user: User,
         *,
-        status: AppointmentStatus | None,
-        upcoming: bool,
-        patient_id: str | None,
-        doctor_id: str | None,
-        page: int,
-        size: int,
-    ) -> AppointmentPage:
-        query: dict[str, Any] = {}
+        patient_id: PydanticObjectId | None = None,
+        doctor_id: PydanticObjectId | None = None,
+        status: AppointmentStatus | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Page[AppointmentOut]:
+        # Un patient ne voit que les siens, un médecin que les siens.
         if user.role == Role.PATIENT:
             if user.patient_id is None:
-                return AppointmentPage(items=[], total=0, page=page, size=size)
-            query["patientId"] = user.patient_id  # never chosen by the patient
-        elif user.role == Role.DOCTOR:
-            query["doctorId"] = user.id
-        else:
-            if patient_id:
-                query["patientId"] = _oid(
-                    patient_id, "invalid_patient_id", "Identifiant patient invalide.", 422
-                )
-            if doctor_id:
-                query["doctorId"] = _oid(
-                    doctor_id, "invalid_doctor_id", "Identifiant médecin invalide.", 422
-                )
-        if status is not None:
-            query["status"] = status.value
-        if upcoming:
-            query["endAt"] = {"$gte": utcnow()}
-        finder = Appointment.find(query)
-        total = await finder.count()
-        order = 1 if upcoming else -1
-        items = (
-            await finder.sort([("startAt", order)]).skip((page - 1) * size).limit(size).to_list()
-        )
-        return AppointmentPage(
-            items=await self._out(items, with_patient=user.role != Role.PATIENT),
-            total=total,
-            page=page,
-            size=size,
-        )
-
-    async def book(self, user: User, data: AppointmentCreate) -> AppointmentOut:
-        if user.role == Role.PATIENT:
-            if user.patient_id is None:
-                raise APIError(
-                    403, "no_patient_record", "Votre compte n'est relié à aucun dossier patient."
-                )
-            if data.patient_id is not None and data.patient_id != str(user.patient_id):
-                raise APIError(
-                    403, "not_your_record", "Vous ne pouvez réserver que pour votre propre dossier."
-                )
+                return Page(items=[], total=0, page=page, page_size=page_size)
             patient_id = user.patient_id
-            pending = await Appointment.find(
-                Eq(Appointment.patient_id, patient_id),
-                Eq(Appointment.status, AppointmentStatus.PENDING),
-                GTE(Appointment.start_at, utcnow()),
-            ).count()
-            if pending >= MAX_PENDING_PER_PATIENT:
-                raise APIError(
-                    409,
-                    "too_many_requests",
-                    f"Vous avez déjà {pending} demandes en attente de confirmation.",
-                )
-            status = AppointmentStatus.PENDING
-        else:
-            if not data.patient_id:
-                raise APIError(422, "patient_required", "Indiquez le patient.")
-            patient_id = _oid(data.patient_id, "patient_not_found", "Dossier patient introuvable.")
-            status = AppointmentStatus.CONFIRMED
-        if await patients.get_patient(patient_id) is None:
-            raise APIError(404, "patient_not_found", "Dossier patient introuvable.")
-
-        doctor = await _doctor(data.doctor_id)
-        start = data.start_at.astimezone(CLINIC_TZ)
-        free = dict(await _free_slots(doctor, start.date(), start.date()))
-        end = free.get(start)
-        if end is None:
-            raise APIError(
-                409, "slot_unavailable", "Ce créneau n'est pas disponible. Choisissez-en un autre."
-            )
-        assert doctor.id is not None
-        if await find_overlapping_appointment(doctor.id, start, end) is not None:
-            raise APIError(409, "slot_unavailable", "Ce créneau vient d'être réservé.")
-        try:
-            appointment = await Appointment(
-                patient_id=patient_id,
-                doctor_id=doctor.id,
-                start_at=start,
-                end_at=end,
-                reason=data.reason,
-                status=status,
-                created_by=user.id,
-            ).insert()
-        except DuplicateKeyError:
-            raise APIError(409, "slot_unavailable", "Ce créneau vient d'être réservé.") from None
-        return (await self._out([appointment], with_patient=user.role != Role.PATIENT))[0]
-
-    async def _appointment(self, user: User, appointment_id: str) -> Appointment:
-        appointment = await Appointment.get(
-            _oid(appointment_id, "appointment_not_found", "Rendez-vous introuvable.")
+        elif user.role == Role.DOCTOR:
+            doctor_id = user.id
+        result = await self.repo.list_appointments(
+            patient_id=patient_id,
+            doctor_id=doctor_id,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+            page_size=page_size,
         )
-        if appointment is None:
-            raise _not_found()
-        if user.role == Role.PATIENT and appointment.patient_id != user.patient_id:
-            raise _not_found()  # another patient's appointment: same answer as missing
-        if user.role == Role.DOCTOR and appointment.doctor_id != user.id:
-            raise _not_found()
-        return appointment
-
-    async def _transition(
-        self, appointment: Appointment, allowed: list[AppointmentStatus], changes: dict[str, Any]
-    ) -> Appointment:
-        document = await Appointment.get_pymongo_collection().find_one_and_update(
-            {"_id": appointment.id, "status": {"$in": [s.value for s in allowed]}},
-            {"$set": {**changes, "updatedAt": utcnow()}},
-            return_document=ReturnDocument.AFTER,
+        return Page(
+            items=[_serialize(item) for item in result.items],
+            total=result.total,
+            page=result.page,
+            page_size=result.page_size,
         )
-        if document is None:
-            raise APIError(409, "appointment_locked", "Ce rendez-vous a déjà été traité.")
-        return Appointment.model_validate(document)
 
-    async def confirm(self, user: User, appointment_id: str) -> AppointmentOut:
-        appointment = await self._appointment(user, appointment_id)
-        updated = await self._transition(
-            appointment, [AppointmentStatus.PENDING], {"status": AppointmentStatus.CONFIRMED.value}
+    async def get(self, appointment_id: PydanticObjectId, user: User) -> AppointmentOut:
+        return _serialize(await self._get_accessible(appointment_id, user))
+
+    async def update(
+        self, appointment_id: PydanticObjectId, changes: AppointmentUpdate, user: User
+    ) -> AppointmentOut:
+        if changes.status == AppointmentStatus.CANCELLED:
+            raise APIError(422, "use_cancel_route", "Pour annuler, utiliser POST /{id}/cancel.")
+        appointment = await self._get_accessible(appointment_id, user)
+        if appointment.status == AppointmentStatus.CANCELLED:
+            raise APIError(409, "appointment_cancelled", "Ce rendez-vous est annulé.")
+
+        doctor_id = changes.doctor_id or appointment.doctor_id
+        start_at = changes.start_at or appointment.start_at
+        if changes.end_at is not None:
+            end_at = changes.end_at
+        else:  # on garde la durée si seul le début change
+            end_at = start_at + (appointment.end_at - appointment.start_at)
+        if end_at <= start_at:
+            raise APIError(422, "invalid_time_range", "La fin doit être après le début.")
+
+        moved = (doctor_id, start_at, end_at) != (
+            appointment.doctor_id,
+            appointment.start_at,
+            appointment.end_at,
         )
-        return (await self._out([updated], with_patient=True))[0]
+        if moved:
+            if changes.doctor_id and await self.repo.get_doctor(changes.doctor_id) is None:
+                raise APIError(404, "doctor_not_found", "Médecin introuvable.")
+            await self._ensure_slot_is_free(doctor_id, start_at, end_at, exclude_id=appointment.id)
+
+        appointment.doctor_id = doctor_id
+        appointment.start_at = start_at
+        appointment.end_at = end_at
+        if changes.reason is not None:
+            appointment.reason = changes.reason
+        if changes.status is not None:
+            appointment.status = changes.status
+        return _serialize(await self.repo.save_appointment(appointment))
 
     async def cancel(
-        self, user: User, appointment_id: str, data: AppointmentCancel
+        self, appointment_id: PydanticObjectId, body: AppointmentCancel, user: User
     ) -> AppointmentOut:
-        appointment = await self._appointment(user, appointment_id)
-        if user.role == Role.DOCTOR:
-            raise APIError(403, "forbidden", "L'annulation passe par le secrétariat.")
-        if user.role == Role.PATIENT and appointment.start_at <= utcnow():
-            raise APIError(
-                409, "appointment_past", "Un rendez-vous passé ne peut plus être annulé."
+        appointment = await self._get_accessible(appointment_id, user)
+        if appointment.status == AppointmentStatus.CANCELLED:
+            raise APIError(409, "appointment_cancelled", "Ce rendez-vous est déjà annulé.")
+        appointment.status = AppointmentStatus.CANCELLED
+        appointment.cancel_reason = body.cancel_reason
+        return _serialize(await self.repo.save_appointment(appointment))
+
+    # ── LLM ───────────────────────────────────────────────────────────────────
+
+    async def _extract_intent(self, message: str, today: date) -> AppointmentIntent:
+        """Appelle le LLM ; les fournisseurs gratuits échouent parfois ponctuellement, on réessaie."""
+        last_error: APIError | None = None
+        for _ in range(LLM_ATTEMPTS):
+            try:
+                return await generate_json(
+                    module="appointments",
+                    system=SYSTEM_PROMPT,
+                    user=intent_prompt(message, today),
+                    output_schema=AppointmentIntent,
+                )
+            except (LLMResponseError, LLMTimeoutError) as exc:
+                last_error = exc
+        assert last_error is not None
+        raise last_error
+
+    async def parse_request(self, body: ParseRequestIn, user: User) -> ParseRequestOut:
+        """Transforme un message libre en demande structurée, puis cherche des créneaux réels.
+
+        Garde-fou : le LLM ne reçoit que le texte du message et la date du jour. Les
+        disponibilités viennent uniquement de la base de données.
+        """
+        patient_id = body.patient_id
+        if user.role == Role.PATIENT:
+            patient_id = user.patient_id
+
+        now = utcnow()
+        today = now.astimezone(CLINIC_TZ).date()
+        intent = await self._extract_intent(body.message, today)
+
+        request = await self.repo.insert_request(
+            AppointmentRequest(
+                raw_message=body.message,
+                parsed=ParsedRequest(
+                    preferred_date=(
+                        datetime.combine(intent.preferred_date, datetime.min.time(), tzinfo=UTC)
+                        if intent.preferred_date
+                        else None
+                    ),
+                    day_part=intent.day_part,
+                    doctor_id=body.doctor_id,
+                    specialty=intent.specialty,
+                    reason=intent.reason,
+                ),
+                patient_id=patient_id,
+                created_by=user.id,
             )
-        updated = await self._transition(
-            appointment,
-            ACTIVE,
-            {"status": AppointmentStatus.CANCELLED.value, "cancelReason": data.reason},
         )
-        return (await self._out([updated], with_patient=user.role != Role.PATIENT))[0]
+        slots = await self._find_slots(intent, body.doctor_id, now)
+        return ParseRequestOut(request_id=str(request.id), parsed=intent, available_slots=slots)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    async def _find_slots(
+        self, intent: AppointmentIntent, doctor_id: PydanticObjectId | None, now: datetime
+    ) -> list[SlotOut]:
+        if intent.preferred_date is None:
+            return []
+        if doctor_id is not None:
+            doctor = await self.repo.get_doctor(doctor_id)
+            doctors = [doctor] if doctor is not None else []
+        else:
+            doctors = await self.repo.list_doctors(intent.specialty)
+
+        day_start, day_end = clinic_day_bounds(intent.preferred_date)
+        proposed: list[SlotOut] = []
+        for doctor in doctors:
+            if doctor.doctor_profile is None:
+                continue
+            busy = await self.repo.busy_ranges(doctor.id, day_start, day_end)
+            for slot in compute_free_slots(
+                doctor.doctor_profile.availabilities, intent.preferred_date, intent.day_part, busy, now
+            ):
+                proposed.append(
+                    SlotOut(
+                        doctor_id=str(doctor.id),
+                        doctor_name=f"{doctor.first_name} {doctor.last_name}",
+                        start_at=slot.start_at,
+                        end_at=slot.end_at,
+                    )
+                )
+        proposed.sort(key=lambda item: (item.start_at, item.doctor_name))
+        return proposed[:MAX_PROPOSED_SLOTS]
+
+    async def _ensure_slot_is_free(
+        self,
+        doctor_id: PydanticObjectId,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_id: PydanticObjectId | None = None,
+    ) -> None:
+        clash = await self.repo.find_overlapping_appointment(
+            doctor_id, start_at, end_at, exclude_id=exclude_id
+        )
+        if clash is not None:
+            raise APIError(409, "slot_taken", "Ce créneau est déjà réservé pour ce médecin.")
+
+    async def _get_accessible(self, appointment_id: PydanticObjectId, user: User) -> Appointment:
+        appointment = await self.repo.get_appointment(appointment_id)
+        if appointment is None:
+            raise APIError(404, "appointment_not_found", "Rendez-vous introuvable.")
+        if user.role == Role.PATIENT:
+            owns_patient_record(user, str(appointment.patient_id))
+        elif user.role == Role.DOCTOR and appointment.doctor_id != user.id:
+            raise HTTPException(status_code=403, detail="Ce rendez-vous n'est pas le vôtre.")
+        return appointment

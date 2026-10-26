@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Appointment, AppointmentPage, AppointmentStatus, Doctor, Slot } from './appointments.model';
 
-const BASE = '/api/appointments';
+const BASE = '/api/booking';
 
 @Injectable({ providedIn: 'root' })
 export class AppointmentsService {

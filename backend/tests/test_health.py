@@ -39,16 +39,15 @@ async def test_llm_status_never_exposes_key(client):
 
     assert response.status_code == 200
     assert response.json()["template"] == {"provider": "mock", "key_configured": False}
-    assert set(response.json()) == {"documents", "follow_up", "reports", "template"}
+    assert set(response.json()) == {"appointments", "documents", "follow_up", "reports", "template"}
     assert "api_key" not in response.text
 
 
 @pytest.mark.asyncio
-async def test_documents_module_returns_typed_501(client):
+async def test_documents_module_requires_authentication(client):
     response = await client.get("/api/documents/")
 
-    assert response.status_code == 501
-    assert response.json()["code"] == "not_implemented"
+    assert response.status_code == 401
 
 
 def test_openapi_contains_only_discovered_module_routes():
@@ -59,7 +58,13 @@ def test_openapi_contains_only_discovered_module_routes():
     assert "/api/llm/status" in paths
     assert set(paths) == {
         "/api/health",
+        "/api/documents",
         "/api/documents/",
+        "/api/documents/patient-options",
+        "/api/documents/patients/{patient_id}/history",
+        "/api/documents/{document_id}",
+        "/api/documents/{document_id}/extract",
+        "/api/documents/{document_id}/review",
         "/api/notes/",
         "/api/notes/summarize",
         "/api/notes/{note_id}",
@@ -77,6 +82,11 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/users/{user_id}/link-patient",
         "/api/users/{user_id}/unlink-patient",
         "/api/dashboard/summary",
+        "/api/reports",
+        "/api/reports/{report_id}",
+        "/api/reports/{report_id}/archive",
+        "/api/reports/{report_id}/finalize",
+        "/api/reports/{report_id}/generate",
         "/api/patients",
         "/api/patients/duplicates",
         "/api/patients/deleted",
@@ -107,11 +117,11 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/billing/payments/{payment_id}/pdf",
         "/api/billing/reports/revenue",
         "/api/billing/reports/unpaid",
-        "/api/appointments",
-        "/api/appointments/doctors",
-        "/api/appointments/slots",
-        "/api/appointments/{appointment_id}/confirm",
-        "/api/appointments/{appointment_id}/cancel",
+        "/api/booking",
+        "/api/booking/doctors",
+        "/api/booking/slots",
+        "/api/booking/{appointment_id}/confirm",
+        "/api/booking/{appointment_id}/cancel",
         "/api/patients/{patient_id}/account",
         "/api/patients/{patient_id}/account/reset-password",
         "/api/portal/me",
@@ -125,12 +135,19 @@ def test_openapi_contains_only_discovered_module_routes():
         "/api/follow-up/reminders/{reminder_id}/export/pdf",
         "/api/follow-up/reminders/{reminder_id}/export/docx",
         "/api/follow-up/reminders/{reminder_id}/export/email",
-        "/api/reports",
-        "/api/reports/{report_id}",
-        "/api/reports/{report_id}/generate",
-        "/api/reports/{report_id}/finalize",
-        "/api/reports/{report_id}/archive",
+        "/api/follow-up/tasks/by-patient/{patient_id}",
+        "/api/follow-up/tasks/prioritize",
+        "/api/follow-up/ai/patient-summary",
+        "/api/follow-up/ai/no-show",
+        "/api/follow-up/ai/schedule",
+        "/api/follow-up/ai/adaptive-reminder",
+        "/api/follow-up/ai/lost-patients",
+        "/api/follow-up/ai/weekly-report",
         "/api/reports/{report_id}/pdf",
+        "/api/appointments",
+        "/api/appointments/parse-request",
+        "/api/appointments/{appointment_id}",
+        "/api/appointments/{appointment_id}/cancel",
     }
 
 

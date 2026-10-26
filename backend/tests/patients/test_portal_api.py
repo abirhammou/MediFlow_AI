@@ -46,7 +46,7 @@ async def patients(user_factory, records):
 
 async def first_slots(api_client, auth, user, doctor, count=1):
     response = await api_client.get(
-        "/api/appointments/slots", headers=auth(user), params={"doctorId": str(doctor.id)}
+        "/api/booking/slots", headers=auth(user), params={"doctorId": str(doctor.id)}
     )
     assert response.status_code == 200, response.text
     return [slot["startAt"] for slot in response.json()[:count]]
@@ -54,7 +54,7 @@ async def first_slots(api_client, auth, user, doctor, count=1):
 
 async def book(api_client, auth, user, doctor, start_at, **extra):
     return await api_client.post(
-        "/api/appointments",
+        "/api/booking",
         headers=auth(user),
         json={"doctorId": str(doctor.id), "startAt": start_at, "reason": "Contrôle", **extra},
     )
@@ -166,7 +166,7 @@ async def test_account_rules(
 async def test_slots_follow_the_availability_grid(api_client, auth, patients, booking_doctor):
     me, _ = patients
     response = await api_client.get(
-        "/api/appointments/slots", headers=auth(me), params={"doctorId": str(booking_doctor.id)}
+        "/api/booking/slots", headers=auth(me), params={"doctorId": str(booking_doctor.id)}
     )
     slots = response.json()
     starts = [datetime.fromisoformat(s["startAt"]) for s in slots]
@@ -176,7 +176,7 @@ async def test_slots_follow_the_availability_grid(api_client, auth, patients, bo
         for s, start in zip(slots, starts, strict=True)
     )
     assert starts == sorted(starts) and starts[0] > datetime.now(starts[0].tzinfo)
-    doctors = (await api_client.get("/api/appointments/doctors", headers=auth(me))).json()
+    doctors = (await api_client.get("/api/booking/doctors", headers=auth(me))).json()
     assert any(d["id"] == str(booking_doctor.id) and d["availabilities"] for d in doctors)
 
 
@@ -195,13 +195,13 @@ async def test_patient_booking_flow(api_client, auth, patients, secretary, booki
     )
     slots_after = await first_slots(api_client, auth, me, booking_doctor, 1)
     patient_confirm = await api_client.post(
-        f"/api/appointments/{booked.json()['id']}/confirm", headers=auth(me)
+        f"/api/booking/{booked.json()['id']}/confirm", headers=auth(me)
     )
     confirmed = await api_client.post(
-        f"/api/appointments/{booked.json()['id']}/confirm", headers=auth(secretary)
+        f"/api/booking/{booked.json()['id']}/confirm", headers=auth(secretary)
     )
     cancelled = await api_client.post(
-        f"/api/appointments/{booked.json()['id']}/cancel",
+        f"/api/booking/{booked.json()['id']}/cancel",
         headers=auth(me),
         json={"reason": "Empêchement"},
     )
@@ -261,8 +261,8 @@ async def test_doctor_sees_only_their_appointments(
     [slot] = await first_slots(api_client, auth, me, booking_doctor)
     await book(api_client, auth, me, booking_doctor, slot)
 
-    theirs = await api_client.get("/api/appointments", headers=auth(booking_doctor))
-    other = await api_client.get("/api/appointments", headers=auth(doctor))
+    theirs = await api_client.get("/api/booking", headers=auth(booking_doctor))
+    other = await api_client.get("/api/booking", headers=auth(doctor))
 
     assert theirs.json()["total"] == 1 and other.json()["total"] == 0
 
@@ -329,7 +329,7 @@ FORBIDDEN_READS = [
     ("get", "/api/billing/invoices/{invoice}", None),
     ("get", "/api/billing/invoices/{invoice}/pdf", None),
     ("get", "/api/billing/payments/{payment}/pdf", None),
-    ("post", "/api/appointments/{appointment}/cancel", {"reason": "x"}),
+    ("post", "/api/booking/{appointment}/cancel", {"reason": "x"}),
 ]
 
 
@@ -351,7 +351,7 @@ async def test_patient_never_reaches_another_patient(
     [
         "/api/reports?patient_id={patient}",
         "/api/billing/invoices?patientId={patient}",
-        "/api/appointments?patientId={patient}",
+        "/api/booking?patientId={patient}",
     ],
 )
 async def test_patient_lists_ignore_another_patient_id(api_client, auth, patients, foreign, path):
@@ -413,7 +413,7 @@ async def test_past_appointment_cannot_be_cancelled_by_the_patient(
     ).insert()
 
     response = await api_client.post(
-        f"/api/appointments/{appointment.id}/cancel", headers=auth(me), json={"reason": "x"}
+        f"/api/booking/{appointment.id}/cancel", headers=auth(me), json={"reason": "x"}
     )
 
     assert response.status_code == 409

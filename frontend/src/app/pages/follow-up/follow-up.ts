@@ -4,13 +4,31 @@ import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../shared/icon/icon';
 import { AuthService, Role } from '../../core/auth/auth.service';
 import { Reminders } from './reminders/reminders';
+import { AiFeatures } from './ai-features/ai-features';
+import { PatientView } from './patient-view/patient-view';
+
+interface PatientOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  recordNumber: string;
+}
+
+interface PatientAppointment {
+  id: string;
+  start_at: string;
+  reason: string | null;
+  status: string;
+}
 
 export interface Task {
   id: string;
   description: string;
   due_date: string;
   status: 'pending' | 'done' | 'cancelled';
+  patient_id: string;
   patient_name: string;
+  patient_record_number: string;
   appointment_date: string;
   appointment_reason: string;
 }
@@ -77,7 +95,7 @@ const DEFAULT_PERMISSIONS: RolePermissions = PERMISSIONS.PATIENT;
 
 @Component({
   selector: 'app-follow-up',
-  imports: [Icon, ReactiveFormsModule, Reminders],
+  imports: [Icon, ReactiveFormsModule, Reminders, AiFeatures, PatientView],
   templateUrl: './follow-up.html',
   styleUrl: './follow-up.scss',
 })
@@ -111,12 +129,10 @@ export class FollowUp {
   reminderResult  = signal<ReminderDraft | null>(null);
   reminderLoading = signal(false);
   reminderError   = signal<string | null>(null);
-
-  // ── Forms ─────────────────────────────────────────────────────────────────
   createForm = this.fb.nonNullable.group({
     description:        ['', [Validators.required, Validators.maxLength(1000)]],
     due_date:           ['', Validators.required],
-    patient_name:       ['', [Validators.required, Validators.maxLength(200)]],
+    patient_id:         ['', Validators.required],
     appointment_date:   ['', Validators.required],
     appointment_reason: ['', [Validators.required, Validators.maxLength(500)]],
   });
@@ -133,8 +149,63 @@ export class FollowUp {
     appointment_reason: ['', Validators.required],
   });
 
+  // ── Patient select — chargement de tous les patients ──────────────────────
+  allPatients        = signal<PatientOption[]>([]);
+  patientsLoading    = signal(false);
+  selectedPatient    = signal<PatientOption | null>(null);
+  patientAppointments = signal<PatientAppointment[]>([]);
+  apptLoading        = signal(false);
+
+  loadPatients() {
+    if (this.allPatients().length > 0) return;
+    this.patientsLoading.set(true);
+    this.http.get<{ items: PatientOption[] }>('/api/patients?size=100&page=1').subscribe({
+      next: res => { this.allPatients.set(res.items); this.patientsLoading.set(false); },
+      error: ()  => this.patientsLoading.set(false),
+    });
+  }
+
+  onPatientChange(id: string) {
+    const p = this.allPatients().find(x => x.id === id) ?? null;
+    this.selectedPatient.set(p);
+    this.createForm.patchValue({ patient_id: id, appointment_date: '', appointment_reason: '' });
+    this.patientAppointments.set([]);
+    if (!id) return;
+    // Charger les RDV confirmés et en attente du patient
+    this.apptLoading.set(true);
+    this.http.get<{ items: PatientAppointment[] }>(
+      `/api/appointments?patient_id=${id}&page=1&page_size=20`
+    ).subscribe({
+      next: res => {
+        // Garder CONFIRMED + PENDING, trier par date desc
+        const valid = res.items
+          .filter(a => a.status === 'CONFIRMED' || a.status === 'PENDING')
+          .sort((a, b) => b.start_at.localeCompare(a.start_at));
+        this.patientAppointments.set(valid);
+        this.apptLoading.set(false);
+      },
+      error: () => this.apptLoading.set(false),
+    });
+  }
+
+  onAppointmentPick(appt: PatientAppointment) {
+    this.createForm.patchValue({
+      appointment_date:   appt.start_at.slice(0, 10),
+      appointment_reason: appt.reason ?? '',
+    });
+  }
+
+  formatAppt(appt: PatientAppointment): string {
+    const d = new Date(appt.start_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    return appt.reason ? `${d} — ${appt.reason}` : d;
+  }
+
   // ── Tabs ──────────────────────────────────────────────────────────────────
-  activeTab = signal<'tasks' | 'reminders'>('tasks');
+  activeTab = signal<'tasks' | 'reminders' | 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'weekly'>('tasks');
+
+  get isPatient(): boolean {
+    return this.auth.user()?.role === 'PATIENT';
+  }
 
   constructor() { this.loadAll(); }
 
@@ -166,6 +237,8 @@ export class FollowUp {
   openCreate() {
     if (!this.perms().canCreate) return;
     this.createForm.reset();
+    this.selectedPatient.set(null);
+    this.loadPatients();
     this.showCreateModal.set(true);
   }
 

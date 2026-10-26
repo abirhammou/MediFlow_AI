@@ -128,12 +128,14 @@ async def test_at_most_one_validated_summary_per_patient(db):
     assert validated and max(validated.values()) == 1
 
 
-async def test_follow_up_page_reads_the_seeded_data(api_client):
+async def test_follow_up_page_reads_the_seeded_data(api_client, user_factory, token_factory):
     await seed("seed-test-password")
+    secretary = await user_factory(email="followup-reader@example.test", role=Role.SECRETARY)
+    headers = {"Authorization": f"Bearer {token_factory(secretary)}"}
 
-    tasks = await api_client.get("/api/follow-up/tasks")
-    stats = await api_client.get("/api/follow-up/tasks/stats")
-    reminders = await api_client.get("/api/follow-up/reminders")
+    tasks = await api_client.get("/api/follow-up/tasks", headers=headers)
+    stats = await api_client.get("/api/follow-up/tasks/stats", headers=headers)
+    reminders = await api_client.get("/api/follow-up/reminders", headers=headers)
 
     assert tasks.status_code == 200 and len(tasks.json()) == await FollowupTask.count()
     assert stats.json()["total"] == len(tasks.json())

@@ -4,7 +4,7 @@
   <div class="rem-header">
     <div class="rem-icon"><app-icon name="zap" [size]="22" /></div>
     <div>
-      <h2>Générer un rappel IA</h2>
+      <h2>Rappels IA</h2>
       <p>Gemini rédige un brouillon · vous le validez · vous l'exportez</p>
     </div>
   </div>
@@ -20,15 +20,79 @@
     }
   </div>
 
+  <!-- ── Rappels intelligents ── -->
+  <div class="smart-box">
+    <div class="smart-header">
+      <div class="smart-icon"><app-icon name="zap" [size]="20" /></div>
+      <div>
+        <h3>Rappels intelligents</h3>
+        <p>Gemini analyse toutes les tâches en attente et les classe par priorité selon les dates d'échéance.</p>
+      </div>
+      <button class="btn btn-primary smart-btn" (click)="prioritizeTasks()" [disabled]="prioritizing()">
+        @if (prioritizing()) { <app-icon name="activity" [size]="15" /> Analyse… }
+        @else { <app-icon name="zap" [size]="15" /> Analyser les priorités }
+      </button>
+    </div>
+
+    @if (priorityError()) {
+      <div class="alert" style="margin-top:.75rem">{{ priorityError() }}</div>
+    }
+
+    @if (showPriority() && priorityResult().length === 0 && !prioritizing()) {
+      <div class="smart-empty">Aucune tâche en attente à analyser.</div>
+    }
+
+    @if (showPriority() && priorityResult().length > 0) {
+      <div class="priority-list">
+        @for (t of priorityResult(); track t.task_id; let i = $index) {
+          <div class="priority-card" [style.border-left-color]="priorityColor(t.priority)">
+            <div class="priority-top">
+              <span class="priority-rank">#{{ i + 1 }}</span>
+              <span class="priority-badge"
+                    [style.background]="priorityBg(t.priority)"
+                    [style.color]="priorityColor(t.priority)">
+                <app-icon name="activity" [size]="11" /> {{ priorityLabel(t.priority) }}
+              </span>
+              <span class="priority-due">
+                <app-icon name="bell" [size]="11" /> {{ t.due_date }}
+              </span>
+            </div>
+            <div class="priority-patient">
+              <app-icon name="user" [size]="13" />
+              <strong>{{ t.patient_name }}</strong>
+            </div>
+            <div class="priority-reason">
+              <app-icon name="activity" [size]="11" /> {{ t.appointment_reason }}
+              · RDV {{ t.appointment_date }}
+            </div>
+            <div class="priority-justification">
+              <app-icon name="shield" [size]="11" />
+              {{ t.justification }}
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
   <!-- ── Génération ── -->
   <div class="gen-box">
     <h3><app-icon name="zap" [size]="16" /> Étape 1 — Générer avec Gemini</h3>
     <form [formGroup]="genForm" (ngSubmit)="generate()">
       <div class="gen-grid">
         <div class="field">
-          <label>Nom du patient <span class="req">*</span></label>
-          <input class="input" [class.invalid]="isInvalid('patient_name')"
-                 formControlName="patient_name" placeholder="Jean Dupont" />
+          <label>Patient <span class="req">*</span></label>
+          <select class="input select-patient"
+                  [class.invalid]="isInvalid('patient_name')"
+                  (change)="onPatientChange($any($event.target).value)">
+            <option value="" disabled selected>
+              @if (patientsLoading()) { Chargement… } @else { Sélectionner un patient }
+            </option>
+            @for (p of allPatients(); track p.id) {
+              <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
+            }
+          </select>
+          @if (isInvalid('patient_name')) { <span class="error">Sélectionnez un patient</span> }
         </div>
         <div class="field">
           <label>Date du rendez-vous <span class="req">*</span></label>
@@ -161,9 +225,9 @@
         }
       </div>
     }
-  </div>
+  </div> <!-- end list-section -->
 
-</div>
+</div> <!-- end reminders-page -->
 
 <!-- ── Modal détail ── -->
 @if (showDetail() && selected(); as r) {

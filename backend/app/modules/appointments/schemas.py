@@ -1,64 +1,79 @@
-"""API schemas of the appointments (camelCase, like the patients module)."""
+from datetime import date
 
-from datetime import datetime
-from typing import Annotated
+from beanie import PydanticObjectId
+from pydantic import AwareDatetime, BaseModel, Field
 
-from app.modules.appointments.models import AppointmentStatus
-from app.modules.patients.schemas import Clean, InputModel, OutputModel, _max_length
+from app.modules.appointments.models import AppointmentStatus, DayPart
 
-
-class AvailabilityOut(OutputModel):
-    day_of_week: int  # 1 = Monday
-    start_time: str
-    end_time: str
-    slot_minutes: int
+# ── CRUD ──────────────────────────────────────────────────────────────────────
 
 
-class DoctorOut(OutputModel):
-    id: str
-    name: str
-    specialty: str | None
-    office_room: str | None
-    availabilities: list[AvailabilityOut]
+class AppointmentCreate(BaseModel):
+    patient_id: PydanticObjectId
+    doctor_id: PydanticObjectId
+    start_at: AwareDatetime
+    end_at: AwareDatetime | None = Field(
+        default=None, description="Par défaut : 30 minutes après le début."
+    )
+    reason: str | None = Field(default=None, max_length=255)
+    request_id: PydanticObjectId | None = Field(
+        default=None, description="Demande en langage libre dont ce rendez-vous est issu."
+    )
 
 
-class SlotOut(OutputModel):
-    start_at: datetime
-    end_at: datetime
+class AppointmentUpdate(BaseModel):
+    doctor_id: PydanticObjectId | None = None
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
+    reason: str | None = Field(default=None, max_length=255)
+    status: AppointmentStatus | None = None
 
 
-class AppointmentCreate(InputModel):
-    """A PATIENT books for their own record (patientId must be absent or their own);
-    SECRETARY / ADMIN give the patientId."""
-
-    doctor_id: str
-    start_at: datetime
-    reason: Annotated[str | None, Clean, _max_length(255)] = None
-    patient_id: str | None = None
+class AppointmentCancel(BaseModel):
+    cancel_reason: str | None = Field(default=None, max_length=255)
 
 
-class AppointmentCancel(InputModel):
-    reason: Annotated[str, Clean, _max_length(255)]
-
-
-class AppointmentOut(OutputModel):
+class AppointmentOut(BaseModel):
     id: str
     patient_id: str
-    patient_name: str | None
-    record_number: str | None
     doctor_id: str
-    doctor_name: str | None
-    specialty: str | None
-    start_at: datetime
-    end_at: datetime
+    start_at: AwareDatetime
+    end_at: AwareDatetime
     reason: str | None
     status: AppointmentStatus
     cancel_reason: str | None
-    created_at: datetime
 
 
-class AppointmentPage(OutputModel):
-    items: list[AppointmentOut]
-    total: int
-    page: int
-    size: int
+# ── LLM ───────────────────────────────────────────────────────────────────────
+
+
+class AppointmentIntent(BaseModel):
+    """Sortie du LLM : ce que le patient demande, rien de plus."""
+
+    preferred_date: date | None = Field(default=None, description="YYYY-MM-DD, null si absente")
+    day_part: DayPart | None = None
+    specialty: str | None = Field(default=None, max_length=100)
+    reason: str | None = Field(default=None, max_length=255)
+
+
+class ParseRequestIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    patient_id: PydanticObjectId | None = Field(
+        default=None, description="Ignoré pour un patient : son propre dossier est utilisé."
+    )
+    doctor_id: PydanticObjectId | None = Field(
+        default=None, description="Si absent, tous les médecins actifs (de la spécialité) sont proposés."
+    )
+
+
+class SlotOut(BaseModel):
+    doctor_id: str
+    doctor_name: str
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+
+
+class ParseRequestOut(BaseModel):
+    request_id: str
+    parsed: AppointmentIntent
+    available_slots: list[SlotOut]

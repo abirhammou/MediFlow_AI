@@ -8,6 +8,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.time import utc_midnight, utcnow
 from app.modules.follow_up.schemas import TaskCreate, TaskStatus, TaskUpdate
+from app.modules.patients.models import Patient
 
 # followup_tasks is validated by database/mongo-init.js (camelCase fields, TASK_STATUS,
 # BSON dates): the API statuses are mapped to the stored ones and back.
@@ -29,13 +30,15 @@ class TaskRepository:
     def __init__(self, database: AsyncDatabase) -> None:
         self.collection = database["followup_tasks"]
 
-    async def create(self, task: TaskCreate) -> dict[str, Any]:
+    async def create(self, task: TaskCreate, patient: Patient) -> dict[str, Any]:
         now = utcnow()
         document = {
             "description": task.description,
             "dueDate": utc_midnight(task.due_date),
             "status": STORED_STATUS[TaskStatus.pending],
-            "patientName": task.patient_name,
+            "patientId": patient.id,
+            "patientName": f"{patient.first_name} {patient.last_name}",
+            "patientRecordNumber": patient.record_number,
             "appointmentDate": utc_midnight(task.appointment_date),
             "appointmentReason": task.appointment_reason,
             "createdAt": now,
@@ -51,6 +54,12 @@ class TaskRepository:
     async def list_by_status(self, status: TaskStatus) -> list[dict[str, Any]]:
         stored = [value for value, api in API_STATUS.items() if api == status]
         cursor = self.collection.find({"status": {"$in": stored}}).sort("dueDate", 1)
+        return [doc async for doc in cursor]
+
+    async def list_by_patient(self, patient_id: str) -> list[dict[str, Any]]:
+        if not ObjectId.is_valid(patient_id):
+            return []
+        cursor = self.collection.find({"patientId": ObjectId(patient_id)}).sort("dueDate", 1)
         return [doc async for doc in cursor]
 
     async def stats(self) -> dict[str, int]:

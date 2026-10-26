@@ -29,6 +29,7 @@ class FollowupTask(TimestampedDocument):
     due_date: AwareDatetime | None = None
     status: TaskStatus = TaskStatus.TODO
     patient_name: str | None = Field(default=None, max_length=200)
+    patient_record_number: str | None = Field(default=None, max_length=20)
     appointment_date: AwareDatetime | None = None
     appointment_reason: str | None = Field(default=None, max_length=500)
     created_by: PydanticObjectId | None = None

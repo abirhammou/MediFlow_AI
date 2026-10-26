@@ -14,19 +14,22 @@ interface NavItem {
   roles?: readonly Role[];
 }
 
+const ALL_STAFF: readonly Role[] = ['ADMIN', 'ADMIN_STAFF', 'SECRETARY', 'DOCTOR'];
+const DOCTORS_AND_ADMIN: readonly Role[] = ['ADMIN', 'ADMIN_STAFF', 'DOCTOR'];
+
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Mon dossier',           route: '/portal',              icon: 'user',       roles: ['PATIENT'] },
-  { label: 'Mes rendez-vous',       route: '/portal/appointments', icon: 'calendar',   roles: ['PATIENT'] },
-  { label: 'Mon suivi',             route: '/portal/follow-ups',   icon: 'bell',       roles: ['PATIENT'] },
-  { label: 'Mes factures',          route: '/portal/invoices',     icon: 'file-text',  roles: ['PATIENT'] },
-  { label: 'Tableau de bord',       route: '/dashboard',           icon: 'home'        },
-  { label: 'Appointment Manager',   route: '/appointment-manager', icon: 'calendar',   dot: '#0284c7' },
-  { label: 'Patients',              route: '/patients',            icon: 'users',      dot: '#d97706', roles: PATIENT_ROLES.read },
-  { label: 'Facturation',           route: '/billing',             icon: 'bar-chart',  dot: '#0f766e', roles: BILLING_ROLES.manage },
-  { label: 'ReportWriter',          route: '/report-writer',       icon: 'file-text',  dot: '#7c3aed' },
-  { label: 'MedDoc',                route: '/med-doc',             icon: 'file-plus',  dot: '#16a34a' },
-  { label: 'FollowUp',              route: '/follow-up',           icon: 'bell',       dot: '#d97706' },
-  { label: 'ClinicFAQ',             route: '/clinic-faq',          icon: 'help-circle',dot: '#9333ea' },
+  { label: 'Mon dossier',           route: '/portal',              icon: 'user',        roles: ['PATIENT'] },
+  { label: 'Mes rendez-vous',       route: '/portal/appointments', icon: 'calendar',    roles: ['PATIENT'] },
+  { label: 'Mon suivi',             route: '/portal/follow-ups',   icon: 'bell',        roles: ['PATIENT'] },
+  { label: 'Mes factures',          route: '/portal/invoices',     icon: 'file-text',   roles: ['PATIENT'] },
+  { label: 'Tableau de bord',       route: '/dashboard',           icon: 'home'                                        },
+  { label: 'Appointment Manager',   route: '/appointment-manager', icon: 'calendar',    dot: '#0284c7'                 },
+  { label: 'Patients',              route: '/patients',            icon: 'users',       dot: '#d97706', roles: PATIENT_ROLES.read },
+  { label: 'Facturation',           route: '/billing',             icon: 'bar-chart',   dot: '#0f766e', roles: BILLING_ROLES.manage },
+  { label: 'ReportWriter',          route: '/report-writer',       icon: 'file-text',   dot: '#7c3aed', roles: DOCTORS_AND_ADMIN },
+  { label: 'MedDoc',                route: '/med-doc',             icon: 'file-plus',   dot: '#16a34a', roles: ALL_STAFF },
+  { label: 'FollowUp',              route: '/follow-up',           icon: 'bell',        dot: '#d97706'                         },
+  { label: 'ClinicFAQ',             route: '/clinic-faq',          icon: 'help-circle', dot: '#9333ea', roles: ALL_STAFF        },
 ];
 
 @Component({

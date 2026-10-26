@@ -17,17 +17,51 @@
 
   <!-- ── Tabs ──────────────────────────────────────────────────────────────── -->
   <div class="tabs-bar">
+    <!-- Onglets principaux -->
     <button class="tab-btn" [class.active]="activeTab() === 'tasks'" (click)="activeTab.set('tasks')">
       <app-icon name="bell" [size]="15" /> Tâches de suivi
     </button>
     <button class="tab-btn" [class.active]="activeTab() === 'reminders'" (click)="activeTab.set('reminders')">
       <app-icon name="zap" [size]="15" /> Rappels IA
     </button>
+    <!-- Séparateur + onglets IA avancée — masqués pour les patients -->
+    @if (!isPatient) {
+      <span class="tabs-separator"></span>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'summary'" (click)="activeTab.set('summary')">
+        🧠 Résumé patient
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'noshow'" (click)="activeTab.set('noshow')">
+        🔮 No-show
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'schedule'" (click)="activeTab.set('schedule')">
+        📅 Planification
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'adaptive'" (click)="activeTab.set('adaptive')">
+        💬 Ton adaptatif
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'lost'" (click)="activeTab.set('lost')">
+        🔁 Perdus de vue
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'weekly'" (click)="activeTab.set('weekly')">
+        📊 Rapport
+      </button>
+    }
   </div>
 
   <!-- ── Tab : Rappels IA ──────────────────────────────────────────────────── -->
   @if (activeTab() === 'reminders') {
-    <app-reminders />
+    @if (isPatient) {
+      <!-- Vue patient : mes rappels + priorités + calendrier + notifications -->
+      <app-patient-view />
+    } @else {
+      <app-reminders />
+    }
+  }
+
+  <!-- ── Tabs IA Avancée ───────────────────────────────────────────────────── -->
+  @if (activeTab() === 'summary' || activeTab() === 'noshow' || activeTab() === 'schedule' ||
+       activeTab() === 'adaptive' || activeTab() === 'lost' || activeTab() === 'weekly') {
+    <app-ai-features [activeFeature]="activeTab()" />
   }
 
   <!-- ── Tab : Tâches ─────────────────────────────────────────────────────── -->
@@ -119,7 +153,11 @@
           <p class="task-desc" (click)="openDetail(task)">{{ task.description }}</p>
 
           <div class="task-meta">
-            <span><app-icon name="user" [size]="12" /> {{ task.patient_name }}</span>
+            <span class="patient-link">
+              <app-icon name="user" [size]="12" />
+              <strong>{{ task.patient_name }}</strong>
+              <span class="record-num">{{ task.patient_record_number }}</span>
+            </span>
             <span><app-icon name="calendar" [size]="12" /> RDV : {{ task.appointment_date }}</span>
             <span><app-icon name="activity" [size]="12" /> {{ task.appointment_reason }}</span>
           </div>
@@ -135,67 +173,9 @@
     </div>
   }
 
-  <!-- ── LLM Reminder : ADMIN, ADMIN_STAFF, SECRETARY, DOCTOR ─────────────── -->
-  @if (perms().canGenerateReminder) {
-    <div class="reminder-box" id="reminder-section">
-      <div class="reminder-header">
-        <app-icon name="zap" [size]="20" />
-        <div>
-          <h2>Générer un rappel IA</h2>
-          <p>Le LLM rédige un brouillon à partir des données du rendez-vous confirmé uniquement.</p>
-        </div>
-      </div>
-
-      <form [formGroup]="reminderForm" (ngSubmit)="generateReminder()">
-        <div class="reminder-form">
-          <div class="field">
-            <label>Nom du patient</label>
-            <input class="input" [class.invalid]="isInvalid(reminderForm, 'patient_name')"
-                   formControlName="patient_name" placeholder="Jean Dupont" />
-            @if (isInvalid(reminderForm, 'patient_name')) {
-              <span class="error">Champ requis</span>
-            }
-          </div>
-          <div class="field">
-            <label>Date du rendez-vous confirmé</label>
-            <input class="input" type="date" [class.invalid]="isInvalid(reminderForm, 'appointment_date')"
-                   formControlName="appointment_date" />
-          </div>
-          <div class="field">
-            <label>Motif du rendez-vous</label>
-            <input class="input" [class.invalid]="isInvalid(reminderForm, 'appointment_reason')"
-                   formControlName="appointment_reason" placeholder="Consultation cardiologie" />
-          </div>
-          <button type="submit" class="btn btn-primary" [disabled]="reminderLoading()">
-            @if (reminderLoading()) {
-              <app-icon name="activity" [size]="15" /> Génération…
-            } @else {
-              <app-icon name="zap" [size]="15" /> Générer
-            }
-          </button>
-        </div>
-      </form>
-
-      @if (reminderError()) {
-        <div class="alert" style="margin-top:1rem">{{ reminderError() }}</div>
-      }
-
-      @if (reminderResult(); as r) {
-        <div class="reminder-result">
-          <div class="reminder-result-label">
-            <app-icon name="shield" [size]="14" />
-            Garde-fou : brouillon basé uniquement sur les données fournies
-          </div>
-          <h3>{{ r.subject }}</h3>
-          <p>{{ r.body }}</p>
-        </div>
-      }
-    </div>
-  }
-
   } <!-- end tab tasks -->
 
-</div> <!-- end module-page -->
+</div><!-- end module-page -->
 
 <!-- ── Modal : créer une tâche (ADMIN, ADMIN_STAFF, SECRETARY) ──────────────── -->
 @if (showCreateModal() && perms().canCreate) {
@@ -219,19 +199,51 @@
         </div>
         <div class="modal-row">
           <div class="field">
-            <label>Nom du patient <span class="req">*</span></label>
-            <input class="input" [class.invalid]="isInvalid(createForm,'patient_name')"
-                   formControlName="patient_name" placeholder="Jean Dupont" />
+            <label>Patient <span class="req">*</span></label>
+            <select class="input select-patient"
+                    [class.invalid]="isInvalid(createForm,'patient_id')"
+                    (change)="onPatientChange($any($event.target).value)"
+                    [value]="createForm.get('patient_id')?.value">
+              <option value="" disabled selected>
+                @if (patientsLoading()) { Chargement… } @else { Sélectionner un patient }
+              </option>
+              @for (p of allPatients(); track p.id) {
+                <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
+              }
+            </select>
+            @if (isInvalid(createForm,'patient_id')) { <span class="error">Sélectionnez un patient</span> }
           </div>
+          <div class="field">
+            <label>Rendez-vous <span class="req">*</span></label>
+            @if (apptLoading()) {
+              <div class="input" style="color:var(--muted);font-size:.82rem">Chargement des RDV…</div>
+            } @else if (selectedPatient() && patientAppointments().length > 0) {
+              <select class="input select-patient"
+                      (change)="onAppointmentPick($any(patientAppointments()[$any($event.target).value]))">
+                <option value="" disabled selected>Sélectionner un rendez-vous</option>
+                @for (a of patientAppointments(); track a.id; let i = $index) {
+                  <option [value]="i">{{ formatAppt(a) }}</option>
+                }
+              </select>
+            } @else if (selectedPatient()) {
+              <div class="input appt-none">Aucun RDV confirmé — saisie manuelle</div>
+            } @else {
+              <input class="input" type="date" formControlName="appointment_date" placeholder="Sélectionnez d'abord un patient" />
+            }
+          </div>
+        </div>
+
+        <!-- Date et motif : remplis auto ou manuels -->
+        <div class="modal-row">
           <div class="field">
             <label>Date du RDV <span class="req">*</span></label>
             <input class="input" type="date" formControlName="appointment_date" />
           </div>
-        </div>
-        <div class="field">
-          <label>Motif du rendez-vous <span class="req">*</span></label>
-          <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
-                 formControlName="appointment_reason" placeholder="Consultation générale" />
+          <div class="field">
+            <label>Motif <span class="req">*</span></label>
+            <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
+                   formControlName="appointment_reason" placeholder="Consultation générale" />
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" (click)="showCreateModal.set(false)">Annuler</button>
@@ -312,6 +324,7 @@
         <div class="detail-item">
           <span class="detail-label">Patient</span>
           <span class="detail-value">{{ task.patient_name }}</span>
+          <span class="detail-sub">{{ task.patient_record_number }}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">Date du RDV</span>

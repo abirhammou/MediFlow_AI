@@ -1,4 +1,4 @@
-/** Shapes of /api/appointments (camelCase). */
+/** Shapes of /api/booking (camelCase). */
 
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW';
 
