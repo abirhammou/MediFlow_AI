@@ -24,32 +24,38 @@
     <button class="tab-btn" [class.active]="activeTab() === 'reminders'" (click)="activeTab.set('reminders')">
       <app-icon name="zap" [size]="15" /> Rappels IA
     </button>
-    <!-- Séparateur -->
-    <span class="tabs-separator"></span>
-    <!-- 6 fonctionnalités IA -->
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'summary'" (click)="activeTab.set('summary')">
-      🧠 Résumé patient
-    </button>
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'noshow'" (click)="activeTab.set('noshow')">
-      🔮 No-show
-    </button>
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'schedule'" (click)="activeTab.set('schedule')">
-      📅 Planification
-    </button>
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'adaptive'" (click)="activeTab.set('adaptive')">
-      💬 Ton adaptatif
-    </button>
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'lost'" (click)="activeTab.set('lost')">
-      🔁 Perdus de vue
-    </button>
-    <button class="tab-btn tab-ai" [class.active]="activeTab() === 'weekly'" (click)="activeTab.set('weekly')">
-      📊 Rapport
-    </button>
+    <!-- Séparateur + onglets IA avancée — masqués pour les patients -->
+    @if (!isPatient) {
+      <span class="tabs-separator"></span>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'summary'" (click)="activeTab.set('summary')">
+        🧠 Résumé patient
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'noshow'" (click)="activeTab.set('noshow')">
+        🔮 No-show
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'schedule'" (click)="activeTab.set('schedule')">
+        📅 Planification
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'adaptive'" (click)="activeTab.set('adaptive')">
+        💬 Ton adaptatif
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'lost'" (click)="activeTab.set('lost')">
+        🔁 Perdus de vue
+      </button>
+      <button class="tab-btn tab-ai" [class.active]="activeTab() === 'weekly'" (click)="activeTab.set('weekly')">
+        📊 Rapport
+      </button>
+    }
   </div>
 
   <!-- ── Tab : Rappels IA ──────────────────────────────────────────────────── -->
   @if (activeTab() === 'reminders') {
-    <app-reminders />
+    @if (isPatient) {
+      <!-- Vue patient : mes rappels + priorités + calendrier + notifications -->
+      <app-patient-view />
+    } @else {
+      <app-reminders />
+    }
   }
 
   <!-- ── Tabs IA Avancée ───────────────────────────────────────────────────── -->
@@ -199,28 +205,45 @@
                     (change)="onPatientChange($any($event.target).value)"
                     [value]="createForm.get('patient_id')?.value">
               <option value="" disabled selected>
-                @if (patientsLoading()) { Chargement… }
-                @else { Sélectionner un patient }
+                @if (patientsLoading()) { Chargement… } @else { Sélectionner un patient }
               </option>
               @for (p of allPatients(); track p.id) {
-                <option [value]="p.id">
-                  {{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}
-                </option>
+                <option [value]="p.id">{{ p.lastName }} {{ p.firstName }} — {{ p.recordNumber }}</option>
               }
             </select>
-            @if (isInvalid(createForm,'patient_id')) {
-              <span class="error">Sélectionnez un patient</span>
+            @if (isInvalid(createForm,'patient_id')) { <span class="error">Sélectionnez un patient</span> }
+          </div>
+          <div class="field">
+            <label>Rendez-vous <span class="req">*</span></label>
+            @if (apptLoading()) {
+              <div class="input" style="color:var(--muted);font-size:.82rem">Chargement des RDV…</div>
+            } @else if (selectedPatient() && patientAppointments().length > 0) {
+              <select class="input select-patient"
+                      (change)="onAppointmentPick($any(patientAppointments()[$any($event.target).value]))">
+                <option value="" disabled selected>Sélectionner un rendez-vous</option>
+                @for (a of patientAppointments(); track a.id; let i = $index) {
+                  <option [value]="i">{{ formatAppt(a) }}</option>
+                }
+              </select>
+            } @else if (selectedPatient()) {
+              <div class="input appt-none">Aucun RDV confirmé — saisie manuelle</div>
+            } @else {
+              <input class="input" type="date" formControlName="appointment_date" placeholder="Sélectionnez d'abord un patient" />
             }
           </div>
+        </div>
+
+        <!-- Date et motif : remplis auto ou manuels -->
+        <div class="modal-row">
           <div class="field">
             <label>Date du RDV <span class="req">*</span></label>
             <input class="input" type="date" formControlName="appointment_date" />
           </div>
-        </div>
-        <div class="field">
-          <label>Motif du rendez-vous <span class="req">*</span></label>
-          <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
-                 formControlName="appointment_reason" placeholder="Consultation générale" />
+          <div class="field">
+            <label>Motif <span class="req">*</span></label>
+            <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
+                   formControlName="appointment_reason" placeholder="Consultation générale" />
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" (click)="showCreateModal.set(false)">Annuler</button>

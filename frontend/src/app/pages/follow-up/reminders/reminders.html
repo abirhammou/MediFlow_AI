@@ -9,24 +9,6 @@
     </div>
   </div>
 
-  <!-- ── Sub-tabs ── -->
-  <div class="sub-tabs">
-    <button class="sub-tab" [class.active]="subTab() === 'reminders'" (click)="subTab.set('reminders')">
-      <app-icon name="bell" [size]="14" /> Rappels sauvegardés
-    </button>
-    <button class="sub-tab ai-tab" [class.active]="subTab() === 'ai'" (click)="subTab.set('ai')">
-      <app-icon name="zap" [size]="14" /> IA Avancée
-    </button>
-  </div>
-
-  <!-- ── IA Avancée ── -->
-  @if (subTab() === 'ai') {
-    <app-ai-features />
-  }
-
-  <!-- ── Rappels (contenu existant) ── -->
-  @if (subTab() === 'reminders') {
-
   <!-- ── Workflow steps ── -->
   <div class="workflow-bar">
     @for (s of steps; track s.key; let i = $index) {
@@ -244,8 +226,6 @@
       </div>
     }
   </div> <!-- end list-section -->
-
-  } <!-- end reminders sub-tab -->
 
 </div> <!-- end reminders-page -->
 
