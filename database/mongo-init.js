@@ -290,6 +290,7 @@ const documents = defineCollection(
     title: str({ maxLength: 200 }),
     rawText: str(),
     filePath: optStr(),
+    archivedAt: optDate,
     categoryCode: optStr({ description: "validated category (document_categories.code)" }),
     aiSuggestedCategoryCode: optStr(),
     extractedFields: {
