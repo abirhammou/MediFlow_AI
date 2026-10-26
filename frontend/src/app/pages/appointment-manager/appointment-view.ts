@@ -14,6 +14,18 @@ import { VoiceButton } from './voice-button';
 import { PatientPicker } from './patient-picker';
 import { AppointmentStats, StatsData } from './appointment-stats';
 
+import { DirectoryService } from './directory.service';
+
+interface PatientOption {
+  id: string;
+}
+
+interface DoctorOption {
+  id: string;
+  name: string;
+}
+
+
 const CLINIC_TZ = 'Africa/Tunis';
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -179,6 +191,7 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
 })
 export class AppointmentView implements OnInit {
   private readonly api       = inject(AppointmentsApi);
+  readonly          directory = inject(DirectoryService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
