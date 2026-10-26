@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -46,8 +46,14 @@ type PatientSearchTarget = 'create' | 'filter';
         }
       </div>
 
-      @if (error()) { <div class="alert error" role="alert">{{ error() }}</div> }
-      @if (info()) { <div class="alert ok" role="status">{{ info() }}</div> }
+      @if (toast(); as notification) {
+        <div class="toast" [class.success]="notification.type === 'success'"
+          [class.error]="notification.type === 'error'" [class.info]="notification.type === 'info'"
+          [attr.role]="notification.type === 'error' ? 'alert' : 'status'" aria-live="polite">
+          <span class="toast-indicator" aria-hidden="true"></span>
+          <span>{{ notification.message }}</span>
+        </div>
+      }
 
       <section class="kpis" aria-label="Statistiques des documents">
         <article class="kpi-card">
@@ -320,7 +326,14 @@ type PatientSearchTarget = 'create' | 'filter';
             </div>
             <div class="split-screen">
               <section class="source-panel">
-                <h3>Document source</h3>
+                <h3 class="panel-heading">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6M8 13h8M8 17h8" />
+                  </svg>
+                  Document source
+                </h3>
                 @if (editMode()) {
                   <label class="field"><span>Titre</span><input [(ngModel)]="title" maxlength="200" /></label>
                   <textarea [(ngModel)]="rawText" rows="18" aria-label="Modifier le texte source"></textarea>
@@ -333,13 +346,20 @@ type PatientSearchTarget = 'create' | 'filter';
                 }
               </section>
               <section class="review-panel">
+                <h3 class="panel-heading">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6M8 13h8M8 17h8" />
+                  </svg>
+                  Champs extraits par l’IA
+                </h3>
                 @if (busy() === 'extract') {
                   <div class="skeleton" role="status" aria-label="Analyse IA en cours">
                     <span></span><span></span><span></span><span></span>
                     <small>Analyse du document…</small>
                   </div>
                 } @else if (extraction(); as proposal) {
-                  <h3>Vérifier les propositions de l’IA</h3>
                   @if (proposal.warnings.length) {
                     <ul class="warnings">@for (warning of proposal.warnings; track $index) { <li>{{ warning }}</li> }</ul>
                   }
@@ -353,6 +373,14 @@ type PatientSearchTarget = 'create' | 'filter';
                   }
                   @if (canReview()) {
                     <div class="actions review-actions">
+                      <button type="button" class="btn" (click)="previewCurrentDocument(document)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        Aperçu PDF
+                      </button>
                       <button type="button" class="btn success" [disabled]="busy() !== null || !reviewFields().length" (click)="review('VALIDATED')">Valider</button>
                       <button type="button" class="btn danger" [disabled]="busy() !== null || !reviewFields().length" (click)="review('REJECTED')">Rejeter</button>
                     </div>
@@ -360,10 +388,9 @@ type PatientSearchTarget = 'create' | 'filter';
                     <p class="hint">La validation est réservée aux médecins et administrateurs.</p>
                   }
                 } @else {
-                  <h3>Champs extraits</h3>
                   @if (document.extracted_fields.length) {
                     @for (field of document.extracted_fields; track $index) {
-                      <div class="extracted-row">
+                      <div class="extracted-row" [attr.data-status]="field.status">
                         <strong>{{ field.name }}</strong><span>{{ field.value ?? 'Non trouvé' }}</span>
                         <span class="status" [attr.data-status]="field.status">{{ statusLabel(field.status) }}</span>
                       </div>
@@ -396,6 +423,7 @@ export class MedDoc {
   private readonly api = inject(MedDocApi);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly patientSearch = new Subject<{ query: string; target: PatientSearchTarget }>();
 
   readonly role = computed(() => this.auth.user()?.role ?? null);
@@ -513,10 +541,10 @@ export class MedDoc {
   readonly editMode = signal(false);
   readonly loading = signal(false);
   readonly busy = signal<'save' | 'extract' | 'review' | 'delete' | null>(null);
-  readonly error = signal<string | null>(null);
-  readonly info = signal<string | null>(null);
+  readonly toast = signal<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   readonly createMode = signal(false);
   private readonly createFormRevision = signal(0);
+  private toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
   patientFilter = '';
   createPatientQuery = '';
@@ -526,6 +554,9 @@ export class MedDoc {
   reviewCategory = '';
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      if (this.toastTimeout) clearTimeout(this.toastTimeout);
+    });
     this.patientFilter = this.route.snapshot.queryParamMap.get('patient_id') ?? '';
     this.patientSearch
       .pipe(
@@ -601,7 +632,6 @@ export class MedDoc {
     this.rawText = '';
     this.editMode.set(false);
     this.clearProposal();
-    this.clearMessages();
   }
 
   applyFilter(): void {
@@ -686,6 +716,11 @@ export class MedDoc {
     this.downloadDocumentPdf(document);
   }
 
+  previewCurrentDocument(document: MedicalDocument): void {
+    if (!this.canReview()) return;
+    this.downloadDocumentPdf(document, true);
+  }
+
   editDocument(document: DocumentListItem): void {
     this.api.get(document.id).subscribe({
       next: (fullDocument) => {
@@ -706,7 +741,7 @@ export class MedDoc {
           this.clearProposal();
         }
         this.busy.set(null);
-        this.info.set('Document archivé.');
+        this.showToast('Document archivé.', 'success');
         this.refresh();
       },
       error: (error: unknown) => this.fail(error),
@@ -724,7 +759,7 @@ export class MedDoc {
           this.clearProposal();
         }
         this.busy.set(null);
-        this.info.set('Document supprimé définitivement.');
+        this.showToast('Document supprimé définitivement.', 'success');
         this.refresh();
       },
       error: (error: unknown) => this.fail(error),
@@ -750,7 +785,6 @@ export class MedDoc {
   }
 
   open(id: string): void {
-    this.clearMessages();
     this.api.get(id).subscribe({
       next: (document) => this.load(document),
       error: (e: unknown) => this.fail(e),
@@ -758,19 +792,26 @@ export class MedDoc {
   }
 
   save(): void {
+    const creating = !this.current();
     this.start('save');
     this.persist().subscribe({
-      next: (document) => this.finish(document, 'Document enregistré.'),
+      next: (document) =>
+        this.finish(
+          document,
+          creating ? 'Document créé avec succès' : 'Document enregistré.',
+        ),
       error: (e: unknown) => this.fail(e),
     });
   }
 
   extract(): void {
     if (!this.canExtract()) return;
+    const creating = !this.current();
     this.start('extract');
     this.persist()
       .pipe(
         switchMap((document) => {
+          if (creating) this.showToast('Document créé avec succès', 'success');
           this.load(document);
           return this.api.extract(document.id);
         }),
@@ -784,7 +825,7 @@ export class MedDoc {
           })));
           this.reviewCategory = proposal.suggested_category_code ?? '';
           this.busy.set(null);
-          this.info.set('Extraction terminée. Relisez et corrigez la proposition avant validation.');
+          this.showToast('Extraction terminée. Vérifiez les champs.', 'info');
           this.refresh();
         },
         error: (e: unknown) => this.fail(e),
@@ -840,7 +881,7 @@ export class MedDoc {
         this.createMode.set(false);
         this.clearProposal();
         this.busy.set(null);
-        this.info.set('Document archivé.');
+        this.showToast('Document archivé.', 'success');
         this.refresh();
       },
       error: (e: unknown) => this.fail(e),
@@ -897,14 +938,13 @@ export class MedDoc {
   }
 
   private start(action: 'save' | 'extract' | 'review' | 'delete'): void {
-    this.clearMessages();
     this.busy.set(action);
   }
 
   private finish(document: MedicalDocument, message: string): void {
     this.load(document);
     this.busy.set(null);
-    this.info.set(message);
+    this.showToast(message, 'success');
     this.refresh();
   }
 
@@ -914,18 +954,47 @@ export class MedDoc {
     this.reviewCategory = '';
   }
 
-  private clearMessages(): void {
-    this.error.set(null);
-    this.info.set(null);
-  }
-
   private fail(error: unknown): void {
     this.busy.set(null);
-    this.error.set(
-      error instanceof Error && !(error instanceof HttpErrorResponse)
-        ? error.message
-        : apiErrorMessage(error),
-    );
+    this.showToast(this.errorMessage(error), 'error');
+  }
+
+  private showToast(message: string, type: 'success' | 'error' | 'info'): void {
+    if (this.toastTimeout) clearTimeout(this.toastTimeout);
+    this.toast.set({ message, type });
+    this.toastTimeout = setTimeout(() => {
+      this.toast.set(null);
+      this.toastTimeout = null;
+    }, 3000);
+  }
+
+  private errorMessage(error: unknown): string {
+    if (!(error instanceof HttpErrorResponse)) {
+      return error instanceof Error ? error.message : apiErrorMessage(error);
+    }
+    const body: unknown = error.error;
+    if (typeof body === 'string' && body.trim()) return body.trim();
+    if (body && typeof body === 'object') {
+      for (const key of ['detail', 'message', 'error']) {
+        const value = (body as Record<string, unknown>)[key];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+        if (value && typeof value === 'object' && 'message' in value) {
+          const message = value.message;
+          if (typeof message === 'string' && message.trim()) return message.trim();
+        }
+        if (Array.isArray(value)) {
+          const messages = value
+            .map((item: unknown) => {
+              if (!item || typeof item !== 'object' || !('msg' in item)) return null;
+              const detail = item.msg;
+              return typeof detail === 'string' ? detail : null;
+            })
+            .filter((message): message is string => message !== null);
+          if (messages.length) return messages.join(' · ');
+        }
+      }
+    }
+    return apiErrorMessage(error);
   }
 
   private loadInitialPatient(): void {
@@ -947,12 +1016,417 @@ export class MedDoc {
     return patient ? `${patient.lastName} ${patient.firstName} - ${patient.recordNumber}` : '';
   }
 
-  private downloadDocumentPdf(document: MedicalDocument): void {
+  private downloadDocumentPdf(document: MedicalDocument, preview = false): void {
     const pdf = new jsPDF({ format: 'a4', unit: 'mm' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 18;
     const contentWidth = pageWidth - margin * 2;
+    const safeTitle = document.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
+    const outputPdf = (filename: string): void => {
+      if (preview) {
+        if (!window.open(pdf.output('bloburl'), '_blank')) {
+          this.showToast('Autorisez les fenêtres contextuelles pour afficher l’aperçu PDF.', 'error');
+        }
+        return;
+      }
+      pdf.save(filename);
+    };
+
+    if (
+      (document.category_code ?? document.ai_suggested_category_code)?.toUpperCase() ===
+      'FINANCIER'
+    ) {
+      const fields = document.extracted_fields;
+      const normalizedFieldName = (name: string): string =>
+        name
+          .toLocaleLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+      const fieldValue = (pattern: RegExp): string | null =>
+        fields.find((field) => pattern.test(normalizedFieldName(field.name)))?.value?.trim() ||
+        null;
+      const selectedPatient =
+        [this.filterPatient(), this.createPatient()].find(
+          (patient) => patient?.id === document.patient_id,
+        ) ?? null;
+      const cachedPatientLabel =
+        this.patientNames()[document.patient_id]?.split(' - ')[0] ?? null;
+      const lastName =
+        fieldValue(/^(nom|nom du patient|nom de famille|last name|surname)$/) ??
+        fieldValue(/^(nom complet|nom et prenom|patient name|full name)$/) ??
+        selectedPatient?.lastName ??
+        cachedPatientLabel;
+      const firstName =
+        fieldValue(/^(prenom|prenom du patient|first name|given name)$/) ??
+        selectedPatient?.firstName;
+      const designation =
+        fieldValue(/^(designation|prestation|acte|service|description)$/) ??
+        'Consultation médicale';
+      const quantityValue = fieldValue(/^(quantite|quantity|qte)$/);
+      const unitPriceValue = fieldValue(/^(prix unitaire|unit price|montant ht|prix)$/);
+      const toAmount = (value: string | null, fallback: number): number => {
+        if (!value) return fallback;
+        let normalized = value.replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+        if (normalized.includes(',') && normalized.includes('.')) {
+          normalized =
+            normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
+              ? normalized.replace(/\./g, '').replace(',', '.')
+              : normalized.replace(/,/g, '');
+        } else {
+          normalized = normalized.replace(',', '.');
+        }
+        const amount = Number(normalized);
+        return Number.isFinite(amount) && amount >= 0 ? amount : fallback;
+      };
+      const quantity = toAmount(quantityValue, 1);
+      const unitPrice = toAmount(unitPriceValue, 80);
+      const totalHt = quantity * unitPrice;
+      const vat = totalHt * 0.19;
+      const fiscalStamp = 1;
+      const netToPay = totalHt + vat + fiscalStamp;
+      const formatAmount = (amount: number): string =>
+        `${amount.toFixed(3)} DT`;
+      const invoiceDate = new Date(document.created_at).toLocaleDateString('fr-FR');
+      const columns = [margin, margin + 94, margin + 119, margin + 149, pageWidth - margin];
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text('MediFlow AI - Clinique', margin, 20);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('Adresse fictive : 10, avenue des Jasmins, Tunis', margin, 27);
+      pdf.text('Matricule fiscal fictif : 0000000/X/X/000', margin, 32);
+      pdf.setDrawColor(100);
+      pdf.line(margin, 38, pageWidth - margin, 38);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(15);
+      pdf.text('FACTURE', pageWidth / 2, 50, { align: 'center' });
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text(`Nom : ${lastName || 'Non renseigné'}`, margin, 64);
+      pdf.text(`Prénom : ${firstName || 'Non renseigné'}`, margin, 70);
+      pdf.text(`Date : ${invoiceDate}`, pageWidth - margin, 70, { align: 'right' });
+
+      const tableY = 82;
+      const headerHeight = 12;
+      const rowHeight = 18;
+      pdf.setFillColor(238, 242, 245);
+      pdf.rect(margin, tableY, contentWidth, headerHeight, 'F');
+      pdf.setDrawColor(130);
+      pdf.rect(margin, tableY, contentWidth, headerHeight + rowHeight);
+      for (const x of columns.slice(1, -1)) {
+        pdf.line(x, tableY, x, tableY + headerHeight + rowHeight);
+      }
+      pdf.line(margin, tableY + headerHeight, pageWidth - margin, tableY + headerHeight);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.text('Désignation', margin + 3, tableY + 8);
+      pdf.text('Quantité', (columns[1] + columns[2]) / 2, tableY + 8, { align: 'center' });
+      pdf.text('Prix unitaire', (columns[2] + columns[3]) / 2, tableY + 8, { align: 'center' });
+      pdf.text('Total', (columns[3] + columns[4]) / 2, tableY + 8, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(pdf.splitTextToSize(designation, columns[1] - margin - 6), margin + 3, tableY + 19);
+      pdf.text(quantity.toFixed(2), (columns[1] + columns[2]) / 2, tableY + 19, {
+        align: 'center',
+      });
+      pdf.text(formatAmount(unitPrice), (columns[2] + columns[3]) / 2, tableY + 19, {
+        align: 'center',
+      });
+      pdf.text(formatAmount(totalHt), (columns[3] + columns[4]) / 2, tableY + 19, {
+        align: 'center',
+      });
+
+      const totalsX = margin + contentWidth * 0.52;
+      const totalsLabelX = totalsX + 4;
+      const totalsValueX = pageWidth - margin - 4;
+      let totalsY = tableY + headerHeight + rowHeight + 14;
+      const writeTotal = (label: string, amount: number, bold = false): void => {
+        pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+        pdf.setFontSize(bold ? 11 : 10);
+        pdf.text(label, totalsLabelX, totalsY);
+        pdf.text(formatAmount(amount), totalsValueX, totalsY, { align: 'right' });
+        totalsY += 8;
+      };
+      pdf.setDrawColor(160);
+      pdf.rect(totalsX, totalsY - 6, pageWidth - margin - totalsX, 39);
+      writeTotal('Total HT', totalHt);
+      writeTotal('TVA (19%)', vat);
+      writeTotal('Timbre fiscal', fiscalStamp);
+      writeTotal('Net à payer', netToPay, true);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.text('Tarif indicatif fictif - Maquette non valable comme facture fiscale.', margin, pageHeight - 16);
+      pdf.text('Document non signé électroniquement', margin, pageHeight - 8);
+      pdf.text('Espace réservé au cachet', pageWidth - margin, pageHeight - 8, {
+        align: 'right',
+      });
+
+      outputPdf(`${safeTitle || 'facture'}.pdf`);
+      return;
+    }
+
+    if (
+      (document.category_code ?? document.ai_suggested_category_code)?.toUpperCase() ===
+      'CERTIFICAT'
+    ) {
+      const fields = document.extracted_fields;
+      const normalizedFieldName = (name: string): string =>
+        name
+          .toLocaleLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+      const fieldValue = (pattern: RegExp): string | null =>
+        fields.find((field) => pattern.test(normalizedFieldName(field.name)))?.value?.trim() ||
+        null;
+      const selectedPatient =
+        [this.filterPatient(), this.createPatient()].find(
+          (patient) => patient?.id === document.patient_id,
+        ) ?? null;
+      const cachedPatientLabel =
+        this.patientNames()[document.patient_id]?.split(' - ')[0] ?? null;
+      const extractedPatientName =
+        [
+          fieldValue(/^(nom|nom du patient|nom de famille|last name|surname)$/),
+          fieldValue(/^(prenom|prenom du patient|first name|given name)$/),
+        ]
+          .filter(Boolean)
+          .join(' ');
+      const patientName =
+        fieldValue(/^(nom complet|nom du patient|patient name|full name)$/) ??
+        (extractedPatientName ||
+          [selectedPatient?.lastName, selectedPatient?.firstName].filter(Boolean).join(' ') ||
+          cachedPatientLabel ||
+          'Non renseigné');
+      const certificateDate = new Date(document.created_at).toLocaleDateString('fr-FR');
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('République Tunisienne', pageWidth / 2, 13, { align: 'center' });
+      pdf.text('Ministère de la Santé', pageWidth / 2, 18, { align: 'center' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.text('Dr. Hela Benali', pageWidth / 2, 29, { align: 'center' });
+      pdf.setDrawColor(100);
+      pdf.line(margin, 36, pageWidth - margin, 36);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text('CERTIFICAT MÉDICAL', pageWidth / 2, 52, { align: 'center' });
+
+      let y = 72;
+      const bodyBottom = pageHeight - 82;
+      const addCertificatePage = (): void => {
+        pdf.addPage();
+        y = margin + 10;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.text('CERTIFICAT MÉDICAL (suite)', pageWidth / 2, y, { align: 'center' });
+        y += 12;
+      };
+      const writeCertificateParagraph = (text: string): void => {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(12);
+        const lines = pdf.splitTextToSize(text, contentWidth) as string[];
+        for (const line of lines) {
+          if (y + 6 > bodyBottom) addCertificatePage();
+          pdf.text(line, margin, y);
+          y += 6;
+        }
+        y += 3;
+      };
+
+      writeCertificateParagraph(
+        `Je soussigné, Dr. Hela Benali, certifie avoir examiné ${patientName}.`,
+      );
+      if (document.raw_text.trim()) {
+        writeCertificateParagraph(document.raw_text.trim());
+      } else {
+        writeCertificateParagraph('Motif et observations : non renseignés.');
+      }
+
+      if (y + 22 > bodyBottom) addCertificatePage();
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.text('Certificat établi pour faire valoir ce que de droit.', margin, y);
+      y += 9;
+      pdf.text(`Fait à Tunis, le ${certificateDate}`, margin, y);
+
+      const signatureY = pageHeight - 58;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Signature du médecin', margin, signatureY + 4);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('Dr. Hela Benali', margin, signatureY + 11);
+      pdf.setDrawColor(100);
+      pdf.line(margin, signatureY + 28, margin + 62, signatureY + 28);
+      pdf.setFontSize(8);
+      pdf.text('Signature à apposer', margin, signatureY + 33);
+      const stampWidth = 54;
+      const stampHeight = 34;
+      const stampX = pageWidth - margin - stampWidth;
+      pdf.rect(stampX, signatureY, stampWidth, stampHeight);
+      pdf.text('Espace réservé au cachet', stampX + stampWidth / 2, signatureY + 19, {
+        align: 'center',
+      });
+
+      const pageCount = pdf.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.text('Document non signé électroniquement', margin, pageHeight - 8);
+        pdf.text(`${page}/${pageCount}`, pageWidth - margin, pageHeight - 8, {
+          align: 'right',
+        });
+      }
+
+      outputPdf(`${safeTitle || 'document'}.pdf`);
+      return;
+    }
+
+    if (
+      (document.category_code ?? document.ai_suggested_category_code)?.toUpperCase() ===
+      'ORDONNANCE'
+    ) {
+      const fields = document.extracted_fields;
+      const normalizedFieldName = (name: string): string =>
+        name
+          .toLocaleLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+      const fieldValue = (pattern: RegExp): string | null =>
+        fields.find((field) => pattern.test(normalizedFieldName(field.name)))?.value?.trim() ||
+        null;
+      const selectedPatient =
+        [this.filterPatient(), this.createPatient()].find(
+          (patient) => patient?.id === document.patient_id,
+        ) ?? null;
+      const cachedPatientLabel =
+        this.patientNames()[document.patient_id]?.split(' - ')[0] ?? null;
+      const fullName = fieldValue(/nom complet|full name|patient name/);
+      const lastName =
+        fieldValue(/^(nom|nom du patient|nom de famille|last name|surname)$/) ??
+        selectedPatient?.lastName ??
+        fullName ??
+        cachedPatientLabel;
+      const firstName =
+        fieldValue(/^(prenom|prenom du patient|first name|given name)$/) ??
+        selectedPatient?.firstName;
+      const birthDate = fieldValue(/naissance|birth date|date of birth/);
+      const age = fieldValue(/(^|\s)age(\s|$)/);
+      const patientDate = birthDate ?? age ?? 'Non renseigné';
+      const consultationDate = new Date(document.created_at).toLocaleDateString('fr-FR');
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('République Tunisienne', pageWidth / 2, 12, { align: 'center' });
+      pdf.text('Ministère de la Santé', pageWidth / 2, 17, { align: 'center' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text('Dr. Hela Benali', pageWidth / 2, 27, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text('Médecine générale', pageWidth / 2, 33, { align: 'center' });
+      pdf.text('Avenue Habib Bourguiba, Tunis', pageWidth / 2, 38, { align: 'center' });
+      pdf.setDrawColor(100);
+      pdf.line(margin, 43, pageWidth - margin, 43);
+
+      const patientBoxY = 48;
+      pdf.setDrawColor(140);
+      pdf.rect(margin, patientBoxY, contentWidth, 35);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Informations du patient', margin + 4, patientBoxY + 7);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(`Nom : ${lastName || 'Non renseigné'}`, margin + 4, patientBoxY + 16);
+      pdf.text(`Prénom : ${firstName || 'Non renseigné'}`, margin + contentWidth / 2, patientBoxY + 16);
+      pdf.text(`Date de naissance / âge : ${patientDate}`, margin + 4, patientBoxY + 27);
+      pdf.text(`Date de consultation : ${consultationDate}`, margin + contentWidth / 2, patientBoxY + 27);
+
+      let y = 96;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text('Prescription', margin, y);
+      y += 9;
+
+      const bodyBottom = pageHeight - 75;
+      const addPrescriptionPage = (): void => {
+        pdf.addPage();
+        y = margin + 12;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.text('Prescription (suite)', margin, y);
+        y += 8;
+      };
+      const writePrescriptionLine = (text: string): void => {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        const lines = pdf.splitTextToSize(text, contentWidth - 6) as string[];
+        for (const line of lines) {
+          if (y + 5 > bodyBottom) addPrescriptionPage();
+          pdf.text(line, margin + 3, y);
+          y += 5.5;
+        }
+      };
+
+      if (fields.length) {
+        for (const field of fields) {
+          writePrescriptionLine(
+            `- ${field.name} : ${field.value?.trim() || 'Non renseigné'}`,
+          );
+        }
+      } else {
+        const prescriptionLines = document.raw_text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        for (const line of prescriptionLines) writePrescriptionLine(`- ${line}`);
+        if (!prescriptionLines.length)
+          writePrescriptionLine('Aucune information de prescription disponible.');
+      }
+
+      const signatureY = Math.max(y + 10, pageHeight - 65);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Signature du médecin', margin, signatureY + 5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('Dr. Hela Benali', margin, signatureY + 12);
+      pdf.setDrawColor(100);
+      pdf.line(margin, signatureY + 29, margin + 62, signatureY + 29);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.text('Signature à apposer', margin, signatureY + 34);
+      const stampWidth = 54;
+      const stampHeight = 34;
+      const stampX = pageWidth - margin - stampWidth;
+      pdf.rect(stampX, signatureY, stampWidth, stampHeight);
+      pdf.text('Espace réservé au cachet', stampX + stampWidth / 2, signatureY + 19, {
+        align: 'center',
+      });
+
+      const pageCount = pdf.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.text('Document non signé électroniquement', margin, pageHeight - 8);
+        pdf.text(`${page}/${pageCount}`, pageWidth - margin, pageHeight - 8, {
+          align: 'right',
+        });
+      }
+
+      outputPdf(`${safeTitle || 'document'}.pdf`);
+      return;
+    }
+
     const lineHeight = 6;
     let y = margin;
 
@@ -1020,8 +1494,7 @@ export class MedDoc {
       );
     }
 
-    const safeTitle = document.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
-    pdf.save(`${safeTitle || 'document'}.pdf`);
+    outputPdf(`${safeTitle || 'document'}.pdf`);
   }
 
   private normalizePatientLabel(value: string): string {
