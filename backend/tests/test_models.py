@@ -215,6 +215,7 @@ FULL: dict[str, Callable[[], Document]] = {
             ExtractedField(name="posologie", value=None),
         ],
         uploaded_by=oid(),
+        archived_at=START,
     ),
     "followup_tasks": lambda: FollowupTask(
         patient_id=oid(),

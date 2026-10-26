@@ -1,14 +1,16 @@
 import json
+import logging
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
-from app.errors import LLMResponseError
+from app.errors import APIError, LLMResponseError
 from app.llm.anonymizer import anonymize
 from app.llm.registry import provider_for
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 async def generate_json(
@@ -27,16 +29,20 @@ async def generate_json(
     )
 
     for attempt in range(2):
-        response = await provider.complete_json(
-            system=safe_system,
-            user=(
-                safe_user
-                if attempt == 0
-                else f"{safe_user}\nLa réponse précédente était invalide; renvoie uniquement le JSON conforme."
-            ),
-            model=model,
-            timeout=settings.llm_timeout_seconds,
-        )
+        try:
+            response = await provider.complete_json(
+                system=safe_system,
+                user=(
+                    safe_user
+                    if attempt == 0
+                    else f"{safe_user}\nLa réponse précédente était invalide; renvoie uniquement le JSON conforme."
+                ),
+                model=model,
+                timeout=settings.llm_timeout_seconds,
+            )
+        except APIError as exc:
+            logger.warning("LLM request failed for module %s (%s)", module, exc.code)
+            raise
         try:
             data = json.loads(response)
             return output_schema.model_validate(data)
