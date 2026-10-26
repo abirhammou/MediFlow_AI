@@ -2,7 +2,6 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Icon } from '../../../shared/icon/icon';
-import { AiFeatures } from '../ai-features/ai-features';
 
 export interface SavedReminder {
   id: string;
@@ -51,7 +50,7 @@ const STEPS = [
 
 @Component({
   selector: 'app-reminders',
-  imports: [Icon, ReactiveFormsModule, AiFeatures],
+  imports: [Icon, ReactiveFormsModule],
   templateUrl: './reminders.html',
   styleUrl:    './reminders.scss',
 })
@@ -60,9 +59,6 @@ export class Reminders {
   private fb   = inject(FormBuilder);
 
   readonly steps = STEPS;
-
-  // ── Sub-tabs ──────────────────────────────────────────────────────────────
-  subTab = signal<'reminders' | 'ai'>('reminders');
 
   // ── State ─────────────────────────────────────────────────────────────────
   reminders   = signal<SavedReminder[]>([]);
@@ -107,8 +103,11 @@ export class Reminders {
         this.showPriority.set(true);
         this.prioritizing.set(false);
       },
-      error: () => {
-        this.priorityError.set('Erreur lors de l\'analyse de priorité.');
+      error: (err: any) => {
+        const msg = err?.status === 429
+          ? '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.'
+          : (err?.error?.detail ?? 'Erreur lors de l\'analyse de priorité.');
+        this.priorityError.set(msg);
         this.prioritizing.set(false);
       },
     });
@@ -157,7 +156,13 @@ export class Reminders {
     this.genError.set(null);
     this.http.post<ReminderDraft>('/api/follow-up/reminders/generate', this.genForm.getRawValue()).subscribe({
       next: d  => { this.draft.set(d); this.generating.set(false); },
-      error: () => { this.genError.set('Erreur lors de la génération Gemini.'); this.generating.set(false); },
+      error: (err: any) => {
+        const msg = err?.status === 429
+          ? '⏳ Quota Gemini dépassé — attendez 1 minute et réessayez.'
+          : (err?.error?.detail ?? 'Erreur lors de la génération.');
+        this.genError.set(msg);
+        this.generating.set(false);
+      },
     });
   }
 

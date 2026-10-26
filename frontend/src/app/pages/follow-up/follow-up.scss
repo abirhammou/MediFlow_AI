@@ -234,3 +234,9 @@
   }
 }
 .detail-sub { font-size: .72rem; color: var(--muted); }
+
+/* ── Appointment picker ── */
+.appt-none {
+  color: var(--muted); font-size: .8rem; font-style: italic;
+  display: flex; align-items: center; height: 44px; cursor: default;
+}
