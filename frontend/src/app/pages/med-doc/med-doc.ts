@@ -4,9 +4,11 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { jsPDF } from 'jspdf';
 import { Subject, catchError, debounceTime, map, of, switchMap, throwError } from 'rxjs';
 import { apiErrorMessage, AuthService } from '../../core/auth/auth.service';
+
+// jsPDF chargé dynamiquement pour éviter les erreurs si le package n'est pas installé
+declare const jsPDF: any;
 import { Icon } from '../../shared/icon/icon';
 import {
   DocumentCreate,
