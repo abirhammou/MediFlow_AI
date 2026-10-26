@@ -200,6 +200,52 @@ export class FollowUp {
     return appt.reason ? `${d} — ${appt.reason}` : d;
   }
 
+  // ── Graphiques ────────────────────────────────────────────────────────────
+
+  /** Donut SVG : répartition par statut */
+  donutSegments(): { color: string; label: string; count: number; dash: number; offset: number }[] {
+    const s = this.stats();
+    const total = s.total || 1;
+    const C = 2 * Math.PI * 40; // circonférence cercle r=40
+    const items = [
+      { color: '#f59e0b', label: 'En attente', count: s.pending   },
+      { color: '#22c55e', label: 'Terminées',  count: s.done      },
+      { color: '#ef4444', label: 'Annulées',   count: s.cancelled },
+    ];
+    let offset = 0;
+    return items.map(item => {
+      const dash = (item.count / total) * C;
+      const seg = { ...item, dash, offset };
+      offset += dash;
+      return seg;
+    });
+  }
+
+  /** Histogramme : tâches par date d'échéance (14 jours autour d'aujourd'hui) */
+  barData(): { label: string; pending: number; done: number; cancelled: number; total: number; isToday: boolean }[] {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const days: { label: string; pending: number; done: number; cancelled: number; total: number; isToday: boolean }[] = [];
+
+    for (let i = -6; i <= 7; i++) {
+      const d = new Date(today); d.setDate(d.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const label = String(d.getDate()).padStart(2, '0');
+      const tasksOnDay = this.tasks().filter(t => t.due_date === iso);
+      days.push({
+        label, isToday: i === 0,
+        pending:   tasksOnDay.filter(t => t.status === 'pending').length,
+        done:      tasksOnDay.filter(t => t.status === 'done').length,
+        cancelled: tasksOnDay.filter(t => t.status === 'cancelled').length,
+        total:     tasksOnDay.length,
+      });
+    }
+    return days;
+  }
+
+  barMax(): number {
+    return Math.max(1, ...this.barData().map(d => d.total));
+  }
+
   // ── Tabs ──────────────────────────────────────────────────────────────────
   activeTab = signal<'tasks' | 'reminders' | 'summary' | 'noshow' | 'schedule' | 'adaptive' | 'lost' | 'weekly'>('tasks');
 

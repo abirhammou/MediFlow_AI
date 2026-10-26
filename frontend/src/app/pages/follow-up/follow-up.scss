@@ -240,3 +240,70 @@
   color: var(--muted); font-size: .8rem; font-style: italic;
   display: flex; align-items: center; height: 44px; cursor: default;
 }
+
+/* ── Charts ── */
+.charts-row {
+  display: grid; grid-template-columns: 280px 1fr; gap: 1rem; margin-bottom: 1.5rem;
+  @media (max-width: 768px) { grid-template-columns: 1fr; }
+}
+.chart-card {
+  background: var(--surface); border-radius: var(--radius); padding: 1.25rem;
+  box-shadow: var(--shadow-md); border: 1px solid var(--border);
+}
+.chart-title {
+  font-size: .82rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin: 0 0 1rem; display: flex; align-items: baseline; gap: .5rem;
+}
+.chart-sub { font-size: .68rem; color: var(--muted); text-transform: none; font-weight: 400; }
+
+/* ── Donut ── */
+.donut-wrap { display: flex; align-items: center; gap: 1.25rem; }
+.donut-svg  { width: 110px; height: 110px; flex-shrink: 0; }
+.donut-num  { font-size: 18px; font-weight: 800; fill: var(--ink); }
+.donut-sub  { font-size: 7px; fill: var(--muted); }
+.donut-legend { display: flex; flex-direction: column; gap: .5rem; flex: 1; }
+.legend-item  { display: flex; align-items: center; gap: .5rem; font-size: .8rem; }
+.legend-dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-label { flex: 1; color: var(--ink); }
+.legend-count { font-weight: 800; font-size: .95rem; }
+
+/* ── Bar chart ── */
+.bar-chart {
+  display: flex; align-items: flex-end; gap: 4px; height: 90px; padding-bottom: 20px;
+  position: relative;
+}
+.bar-col {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 1; gap: 2px; position: relative;
+}
+.bar-value {
+  font-size: .65rem; font-weight: 700; color: var(--ink); text-align: center;
+  min-height: 14px; display: block;
+}
+.bar-stack {
+  width: 100%; flex: 1; display: flex; flex-direction: column-reverse;
+  border-radius: 4px 4px 0 0; overflow: hidden; min-height: 4px;
+}
+.bar-seg {
+  transition: flex .3s;
+  &.pending   { background: #7c3aed; }
+  &.done      { background: #a78bfa; }
+  &.cancelled { background: #ef4444; }
+  &.empty     { background: var(--border); opacity: .4; }
+}
+.bar-label {
+  font-size: .62rem; color: var(--muted); position: absolute; bottom: 0;
+  text-align: center; width: 100%;
+  &.today { color: #7c3aed; font-weight: 800; }
+}
+.bar-legend {
+  display: flex; gap: 1rem; margin-top: .625rem; flex-wrap: wrap;
+  font-size: .72rem; color: var(--muted);
+  span { display: flex; align-items: center; gap: .3rem; }
+}
+.bar-dot {
+  width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+  &.pending   { background: #7c3aed; }
+  &.done      { background: #a78bfa; }
+  &.cancelled { background: #ef4444; }
+}

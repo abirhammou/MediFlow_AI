@@ -102,6 +102,80 @@
     </div>
   </div>
 
+  <!-- ── Graphiques ──────────────────────────────────────────────────────── -->
+  @if (!loading() && stats().total > 0) {
+    <div class="charts-row">
+
+      <!-- Donut : répartition par statut -->
+      <div class="chart-card donut-card">
+        <h3 class="chart-title">Répartition par statut</h3>
+        <div class="donut-wrap">
+          <svg viewBox="0 0 100 100" class="donut-svg">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="#f1f5f9" stroke-width="14"/>
+            @for (seg of donutSegments(); track seg.label) {
+              @if (seg.count > 0) {
+                <circle cx="50" cy="50" r="40" fill="none"
+                        [attr.stroke]="seg.color"
+                        stroke-width="14"
+                        stroke-dasharray="{{ seg.dash }} {{ 251.3 - seg.dash }}"
+                        [attr.stroke-dashoffset]="-seg.offset"
+                        stroke-linecap="butt"
+                        transform="rotate(-90 50 50)" />
+              }
+            }
+            <text x="50" y="47" text-anchor="middle" class="donut-num">{{ stats().total }}</text>
+            <text x="50" y="57" text-anchor="middle" class="donut-sub">tâches</text>
+          </svg>
+          <div class="donut-legend">
+            @for (seg of donutSegments(); track seg.label) {
+              <div class="legend-item">
+                <span class="legend-dot" [style.background]="seg.color"></span>
+                <span class="legend-label">{{ seg.label }}</span>
+                <strong class="legend-count" [style.color]="seg.color">{{ seg.count }}</strong>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Histogramme : tâches par date d'échéance -->
+      <div class="chart-card bar-card">
+        <h3 class="chart-title">
+          Tâches par date d'échéance
+          <span class="chart-sub">14 jours autour d'aujourd'hui (aujourd'hui en violet)</span>
+        </h3>
+        <div class="bar-chart">
+          @for (day of barData(); track day.label) {
+            <div class="bar-col">
+              <span class="bar-value" [style.opacity]="day.total > 0 ? 1 : 0">{{ day.total || '' }}</span>
+              <div class="bar-stack">
+                @if (day.cancelled > 0) {
+                  <div class="bar-seg cancelled" [style.flex]="day.cancelled"></div>
+                }
+                @if (day.done > 0) {
+                  <div class="bar-seg done" [style.flex]="day.done"></div>
+                }
+                @if (day.pending > 0) {
+                  <div class="bar-seg pending" [style.flex]="day.pending"></div>
+                }
+                @if (day.total === 0) {
+                  <div class="bar-seg empty" style="flex:1"></div>
+                }
+              </div>
+              <span class="bar-label" [class.today]="day.isToday">{{ day.label }}</span>
+            </div>
+          }
+        </div>
+        <div class="bar-legend">
+          <span><span class="bar-dot pending"></span> En attente</span>
+          <span><span class="bar-dot done"></span> Terminées</span>
+          <span><span class="bar-dot cancelled"></span> Annulées</span>
+        </div>
+      </div>
+
+    </div>
+  }
+
   <!-- ── Error ────────────────────────────────────────────────────────────── -->
   @if (apiError()) {
     <div class="alert" role="alert">{{ apiError() }}</div>
@@ -233,17 +307,11 @@
           </div>
         </div>
 
-        <!-- Date et motif : remplis auto ou manuels -->
-        <div class="modal-row">
-          <div class="field">
-            <label>Date du RDV <span class="req">*</span></label>
-            <input class="input" type="date" formControlName="appointment_date" />
-          </div>
-          <div class="field">
-            <label>Motif <span class="req">*</span></label>
-            <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
-                   formControlName="appointment_reason" placeholder="Consultation générale" />
-          </div>
+        <!-- Motif : rempli auto ou manuel -->
+        <div class="field">
+          <label>Motif <span class="req">*</span></label>
+          <input class="input" [class.invalid]="isInvalid(createForm,'appointment_reason')"
+                 formControlName="appointment_reason" placeholder="Consultation générale" />
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" (click)="showCreateModal.set(false)">Annuler</button>
