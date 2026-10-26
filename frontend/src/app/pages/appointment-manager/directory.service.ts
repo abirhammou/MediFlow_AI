@@ -60,24 +60,13 @@ export class DirectoryService {
     });
   }
 
-  /** Médecins via /api/users (réservé à l'admin) : sans droit, on retourne une liste vide. */
+  /** Médecins actifs (endpoint du module, ouvert à tous les rôles connectés). */
   loadDoctors(): Observable<DoctorOption[]> {
-    return this.http
-      .get<{ items: { id: string; first_name: string; last_name: string; is_active: boolean }[] }>(
-        '/api/users',
-        { params: new HttpParams().set('role', 'DOCTOR').set('size', 100) },
-      )
-      .pipe(
-        map(page =>
-          page.items
-            .filter(u => u.is_active)
-            .map(u => ({ id: u.id, name: `Dr ${u.first_name} ${u.last_name}`.trim() })),
-        ),
-        tap(doctors =>
-          this.doctorNames.set(Object.fromEntries(doctors.map(d => [d.id, d.name]))),
-        ),
-        catchError(() => of([] as DoctorOption[])),
-      );
+    return this.http.get<{ id: string; name: string; specialty: string | null }[]>('/api/appointments/doctors').pipe(
+      map(list => list.map(d => ({ id: d.id, name: `Dr ${d.name}` }))),
+      tap(doctors => this.doctorNames.set(Object.fromEntries(doctors.map(d => [d.id, d.name])))),
+      catchError(() => of([] as DoctorOption[])),
+    );
   }
 
   patientName(id: string): string {

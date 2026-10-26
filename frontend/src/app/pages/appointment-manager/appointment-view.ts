@@ -9,19 +9,10 @@ import { ToastService } from '../../shared/toast/toast.service';
 import {
   Appointment, AppointmentStatus, AppointmentsApi, ParseResult, STATUS_LABELS, Slot,
 } from './appointments.api';
-import { AppointmentStats, StatsData } from './appointment-stats';
-import { PatientPicker } from './patient-picker';
+import { DirectoryService, DoctorOption, PatientOption } from './directory.service';
 import { VoiceButton } from './voice-button';
-
-interface PatientOption {
-  id: string;
-}
-
-interface DoctorOption {
-  id: string;
-  name: string;
-}
-
+import { PatientPicker } from './patient-picker';
+import { StatsData } from './appointment-stats';
 const CLINIC_TZ = 'Africa/Tunis';
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -41,7 +32,7 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
  */
 @Component({
   selector: 'app-appointment-view',
-  imports: [Icon, FormsModule, DatePipe, AppointmentStats, PatientPicker, VoiceButton],
+  imports: [Icon, FormsModule, DatePipe, AppointmentsApi, PatientPicker, VoiceButton],
   styleUrl: './appointment-manager.scss',
   template: `
     <div class="module-page">
@@ -144,8 +135,8 @@ export type ViewMode = 'patient' | 'secretary' | 'admin' | 'doctor';
                 @for (a of items(); track a.id) {
                   <tr>
                     <td>{{ a.start_at | date: 'dd/MM/yyyy HH:mm' }}</td>
-                    @if (mode() !== 'patient') { <td>{{ a.patient_id }}</td> }
-                    @if (mode() !== 'doctor') { <td>{{ a.doctor_id }}</td> }
+                    @if (mode() !== 'patient') { <td>{{ directory.patientName(a.patient_id) }}</td> }
+                    @if (mode() !== 'doctor') { <td>{{ directory.doctorName(a.doctor_id) }}</td> }
                     <td>{{ a.reason || '—' }}</td>
                     <td><span class="badge" [attr.data-status]="a.status">{{ label(a.status) }}</span></td>
                     <td class="right">
@@ -187,6 +178,7 @@ export class AppointmentView implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly cdr = inject(ChangeDetectorRef);
+  readonly directory = inject(DirectoryService);
 
   // On initialise le mode à 'patient' par défaut, puis on le met à jour dans ngOnInit
   readonly mode = signal<ViewMode>('patient');
@@ -228,6 +220,7 @@ export class AppointmentView implements OnInit {
       this.mode.set(userRole as ViewMode);
       this.cdr.detectChanges(); // Force la mise à jour de la vue
     }
+       this.directory.loadDoctors().subscribe(doctors => this.doctors.set(doctors));
     if (this.mode() === 'admin') {
       this.refreshStats();
     }
@@ -254,6 +247,11 @@ export class AppointmentView implements OnInit {
   onPatientPicked(patient: PatientOption | null): void {
     this.patientId = patient?.id ?? '';
     this.result.set(null);
+    if (this.mode() === 'secretary') {
+      // Le tableau n'affiche que les rendez-vous du patient choisi
+      this.patientFilter = this.patientId;
+      this.reload(1);
+    }
   }
 
   /** Chiffres par statut + rendez-vous des 14 jours autour d'aujourd'hui. */
@@ -298,6 +296,7 @@ export class AppointmentView implements OnInit {
     }).subscribe({
       next: p => {
         this.items.set(p.items);
+        if (this.mode() !== 'patient') this.directory.resolvePatients(p.items.map(a => a.patient_id));
         this.total.set(p.total);
         this.page.set(p.page);
         this.loading.set(false);

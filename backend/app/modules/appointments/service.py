@@ -22,6 +22,7 @@ from app.modules.appointments.schemas import (
     AppointmentIntent,
     AppointmentOut,
     AppointmentUpdate,
+    DoctorOut,
     ParseRequestIn,
     ParseRequestOut,
     SlotOut,
@@ -128,6 +129,18 @@ class AppointmentService:
             page=result.page,
             page_size=result.page_size,
         )
+
+    async def list_doctors(self) -> list[DoctorOut]:
+        """Médecins actifs : id, nom et spécialité (pour afficher des noms, pas des ID)."""
+        doctors = await self.repo.list_doctors()
+        return [
+            DoctorOut(
+                id=str(doctor.id),
+                name=f"{doctor.first_name} {doctor.last_name}".strip(),
+                specialty=doctor.doctor_profile.specialty if doctor.doctor_profile else None,
+            )
+            for doctor in doctors
+        ]
 
     async def get(self, appointment_id: PydanticObjectId, user: User) -> AppointmentOut:
         return _serialize(await self._get_accessible(appointment_id, user))

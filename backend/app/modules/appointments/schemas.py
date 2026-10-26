@@ -77,3 +77,7 @@ class ParseRequestOut(BaseModel):
     request_id: str
     parsed: AppointmentIntent
     available_slots: list[SlotOut]
+class DoctorOut(BaseModel):
+    id: str
+    name: str
+    specialty: str | None
