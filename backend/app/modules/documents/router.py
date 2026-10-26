@@ -21,9 +21,9 @@ readers = require_roles(
     Role.PATIENT, Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN
 )
 creators = require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN)
-editors = require_roles(Role.DOCTOR, Role.ADMIN_STAFF, Role.ADMIN)
+editors = require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN)
 archivers = require_roles(Role.DOCTOR, Role.ADMIN)
-extractors = require_roles(Role.DOCTOR, Role.ADMIN_STAFF, Role.ADMIN)
+extractors = require_roles(Role.DOCTOR, Role.SECRETARY, Role.ADMIN_STAFF, Role.ADMIN)
 reviewers = require_roles(Role.DOCTOR, Role.ADMIN)
 
 

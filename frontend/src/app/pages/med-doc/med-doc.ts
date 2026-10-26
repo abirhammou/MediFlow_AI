@@ -454,7 +454,7 @@ export class MedDoc {
   );
   readonly canUpdate = computed(
     () =>
-      ['DOCTOR', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
+      ['DOCTOR', 'SECRETARY', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
       !this.current()?.archived_at,
   );
   readonly canEditForm = computed(() =>
@@ -462,7 +462,7 @@ export class MedDoc {
   );
   readonly canExtract = computed(
     () =>
-      ['DOCTOR', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
+      ['DOCTOR', 'SECRETARY', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
       !this.current()?.archived_at,
   );
   readonly canArchive = computed(
@@ -474,7 +474,7 @@ export class MedDoc {
   readonly canReview = computed(() => ['DOCTOR', 'ADMIN'].includes(this.role() ?? ''));
 
   canUpdateDocument(document: DocumentListItem): boolean {
-    return ['DOCTOR', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
+    return ['DOCTOR', 'SECRETARY', 'ADMIN_STAFF', 'ADMIN'].includes(this.role() ?? '') &&
       document.status !== 'ARCHIVED';
   }
 

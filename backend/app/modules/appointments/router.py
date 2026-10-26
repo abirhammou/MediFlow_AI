@@ -11,6 +11,7 @@ from app.modules.appointments.schemas import (
     AppointmentCreate,
     AppointmentOut,
     AppointmentUpdate,
+    DoctorOut,
     ParseRequestIn,
     ParseRequestOut,
 )
@@ -65,6 +66,18 @@ async def list_appointments(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/doctors", response_model=list[DoctorOut])
+async def list_doctors(
+    user: User = Depends(require_roles(*ALL_ROLES)),
+    service: AppointmentService = Depends(get_service),
+) -> list[DoctorOut]:
+    """Médecins actifs (id, nom, spécialité), pour afficher des noms au lieu d'identifiants.
+
+    Ouvert à tous les rôles connectés : ces informations ne sont pas sensibles.
+    """
+    return await service.list_doctors()
 
 
 # ── LLM (déclaré avant /{appointment_id} pour que le chemin fixe soit prioritaire) ──

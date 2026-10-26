@@ -491,3 +491,31 @@ async def test_parse_request_gives_up_after_three_llm_failures(http, staff, monk
     )
 
     assert response.status_code == 502
+
+
+# ── Liste des médecins ────────────────────────────────────────────────────────
+
+
+async def test_doctors_list_is_readable_by_every_role_and_requires_login(http, staff):
+    secretary, doctor, patient = staff
+    patient_user = await make_user("patient@example.test", Role.PATIENT, patient_id=patient.id)
+
+    assert (await http.get("/api/appointments/doctors")).status_code == 401
+    for user in (secretary, doctor, patient_user):
+        response = await http.get("/api/appointments/doctors", headers=auth(user))
+        assert response.status_code == 200
+        assert response.json() == [
+            {"id": str(doctor.id), "name": "Doctor Test", "specialty": "Cardiologie"}
+        ]
+
+
+async def test_doctors_list_hides_inactive_doctors_and_other_roles(http, staff):
+    secretary, doctor, _ = staff
+    await make_doctor("inactive@example.test", "Dermatologie")
+    inactive = await User.find_one(User.email == "inactive@example.test")
+    inactive.is_active = False
+    await inactive.save()
+
+    response = await http.get("/api/appointments/doctors", headers=auth(secretary))
+
+    assert [d["id"] for d in response.json()] == [str(doctor.id)]
